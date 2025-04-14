@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "description": "A minimal, intuitive domain-specific language for describing business process diagrams",
   "scripts": {
-    "build": "node build-simple.js",
+    "build": "node build.js",
     "start": "http-server dist -o"
   },
   "keywords": [

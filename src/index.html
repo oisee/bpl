@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+<\!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -144,7 +144,7 @@
       border-radius: 4px;
     }
   </style>
-  <!-- Load Mermaid -->
+  <\!-- Load Mermaid -->
   <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
 </head>
 <body>
@@ -180,12 +180,158 @@
     </div>
   </div>
   
-  <!-- Load our app -->
-  <script type="module">
-    import { SimpleBpmnEditor } from './index.js';
+  <\!-- Simple JavaScript for the editor -->
+  <script>
+    // Initialize Mermaid
+    mermaid.initialize({
+      startOnLoad: false,
+      theme: "default",
+      securityLevel: "loose",
+      flowchart: {
+        useMaxWidth: false,
+        htmlLabels: true
+      }
+    });
+
+    // Wait for DOM to be loaded
+    document.addEventListener("DOMContentLoaded", () => {
+      // Sample DSL
+      const sampleDSL = `:Order Process
+
+@Customer
+  place order
+  send: Payment Information
+  "Customer waits for confirmation
+  receive: Order Confirmation
+
+@System
+  receive: Payment Information
+  process order
+  validate payment
+  ?Payment successful
+    +yes
+    -no
+  ship order
+  send: Order Confirmation
+
+^Order @Customer.place order -> @System.process order
+#OrderData place order`;
+
+      // DOM elements
+      const codeEditor = document.getElementById("code-editor");
+      const renderButton = document.getElementById("render-button");
+      const mermaidPreview = document.getElementById("mermaid-preview");
+      const astPreview = document.getElementById("ast-preview");
+      const toggleAstButton = document.getElementById("toggle-ast-button");
+      const diagramPreview = document.getElementById("diagram-preview");
+      const previewTabs = document.querySelectorAll(".preview-tab");
+      
+      // Set sample code
+      if (codeEditor) {
+        codeEditor.value = sampleDSL;
+      }
+      
+      // For demo, just show the sample text in the AST view
+      if (astPreview) {
+        astPreview.textContent = "This would normally show the parsed AST.\n\nThe normal implementation parses the DSL into an Abstract Syntax Tree before rendering.";
+      }
+      
+      // Toggle AST/Diagram view
+      if (toggleAstButton) {
+        toggleAstButton.addEventListener("click", () => {
+          if (diagramPreview && astPreview) {
+            if (diagramPreview.classList.contains("hidden")) {
+              diagramPreview.classList.remove("hidden");
+              astPreview.classList.add("hidden");
+              
+              // Update tabs
+              previewTabs.forEach(tab => {
+                if (tab.getAttribute("data-tab") === "diagram") {
+                  tab.classList.add("active");
+                } else {
+                  tab.classList.remove("active");
+                }
+              });
+            } else {
+              diagramPreview.classList.add("hidden");
+              astPreview.classList.remove("hidden");
+              
+              // Update tabs
+              previewTabs.forEach(tab => {
+                if (tab.getAttribute("data-tab") === "ast") {
+                  tab.classList.add("active");
+                } else {
+                  tab.classList.remove("active");
+                }
+              });
+            }
+          }
+        });
+      }
+      
+      // Tab switching
+      previewTabs.forEach(tab => {
+        tab.addEventListener("click", (e) => {
+          const tabName = tab.getAttribute("data-tab");
+          
+          // Update active tab
+          previewTabs.forEach(t => t.classList.remove("active"));
+          tab.classList.add("active");
+          
+          // Show/hide corresponding content
+          if (tabName === "diagram" && diagramPreview && astPreview) {
+            diagramPreview.classList.remove("hidden");
+            astPreview.classList.add("hidden");
+          } else if (tabName === "ast" && diagramPreview && astPreview) {
+            diagramPreview.classList.add("hidden");
+            astPreview.classList.remove("hidden");
+          }
+        });
+      });
+      
+      // Render button for Mermaid diagram
+      if (renderButton && mermaidPreview) {
+        renderButton.addEventListener("click", () => {
+          // Clear previous diagram
+          mermaidPreview.innerHTML = "";
+          
+          // Create a sample diagram from the text
+          const diagramCode = `graph TD
+    A[Customer: place order] --> B[Customer: send Payment Information]
+    B --> C[Customer: wait for confirmation]
+    C --> D[Customer: receive Order Confirmation]
     
-    // Create a global instance
-    window.editor = new SimpleBpmnEditor();
+    E[System: receive Payment Information] --> F[System: process order]
+    F --> G[System: validate payment]
+    G -->|yes| H[System: ship order]
+    G -->|no| I[Payment Failed]
+    H --> J[System: send Order Confirmation]
+    
+    B -.-> E
+    J -.-> D`;
+          
+          try {
+            // Create container for the diagram
+            const diagramId = `diagram-${Date.now()}`;
+            const diagramContainer = document.createElement("div");
+            diagramContainer.id = diagramId;
+            mermaidPreview.appendChild(diagramContainer);
+            
+            // Render Mermaid diagram
+            mermaid.render(diagramId, diagramCode, (svgCode) => {
+              diagramContainer.innerHTML = svgCode;
+              console.log("Diagram rendered successfully");
+            });
+          } catch (error) {
+            console.error("Error rendering diagram:", error);
+            mermaidPreview.innerHTML = `<div class="error">Error rendering diagram: ${error.message || "Unknown error"}</div>`;
+          }
+        });
+        
+        // Initial render
+        renderButton.click();
+      }
+    });
   </script>
 </body>
 </html>
