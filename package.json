@@ -2,12 +2,9 @@
   "name": "bpmn-lite-dsl-editor",
   "version": "0.1.0",
   "description": "A minimal, intuitive domain-specific language for describing business process diagrams",
-  "main": "dist/index.js",
   "scripts": {
-    "build": "node build.js",
-    "watch": "tsc -w",
-    "start": "http-server dist -o",
-    "test": "node test.js"
+    "build": "node build-simple.js",
+    "start": "http-server dist -o"
   },
   "keywords": [
     "bpmn",
@@ -19,7 +16,6 @@
   "author": "",
   "license": "MIT",
   "devDependencies": {
-    "http-server": "^14.1.1",
-    "typescript": "^5.0.4"
+    "http-server": "^14.1.1"
   }
 }

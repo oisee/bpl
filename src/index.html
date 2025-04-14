@@ -44,6 +44,27 @@
       flex: 1;
       height: 100%;
       border-right: 1px solid #ccc;
+      display: flex;
+      flex-direction: column;
+      padding: 10px;
+    }
+    
+    #code-editor {
+      width: 100%;
+      height: calc(100% - 50px);
+      font-family: monospace;
+      font-size: 14px;
+      resize: none;
+      padding: 10px;
+      box-sizing: border-box;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+    }
+    
+    .editor-controls {
+      margin-top: 10px;
+      display: flex;
+      justify-content: flex-end;
     }
     
     .preview-container {
@@ -104,7 +125,27 @@
     .hidden {
       display: none;
     }
+    
+    button {
+      padding: 5px 10px;
+      background-color: #4CAF50;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    
+    button:hover {
+      background-color: #45a049;
+    }
+    
+    select {
+      padding: 5px;
+      border-radius: 4px;
+    }
   </style>
+  <!-- Load Mermaid -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
 </head>
 <body>
   <header>
@@ -115,12 +156,17 @@
         <option value="dot">DOT</option>
         <option value="bpmn">BPMN</option>
       </select>
-      <button id="toggle-ast">Toggle AST View</button>
+      <button id="toggle-ast-button">Toggle AST View</button>
     </div>
   </header>
   
   <div class="main-container">
-    <div id="editor" class="editor-container"></div>
+    <div class="editor-container">
+      <textarea id="code-editor" spellcheck="false"></textarea>
+      <div class="editor-controls">
+        <button id="render-button">Render Diagram</button>
+      </div>
+    </div>
     <div class="preview-container">
       <div class="preview-tabs">
         <div class="preview-tab active" data-tab="diagram">Diagram</div>
@@ -134,20 +180,12 @@
     </div>
   </div>
   
-  <!-- Load Monaco Editor -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.36.1/min/vs/loader.min.js"></script>
-  
-  <!-- Load Mermaid -->
-  <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
-  
   <!-- Load our app -->
   <script type="module">
-    import { BpmnLiteEditor } from './index.js';
+    import { SimpleBpmnEditor } from './index.js';
     
-    // Initialize the editor when the page loads
-    window.onload = () => {
-      new BpmnLiteEditor();
-    };
+    // Create a global instance
+    window.editor = new SimpleBpmnEditor();
   </script>
 </body>
 </html>

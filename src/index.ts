@@ -2,17 +2,6 @@ import { BpmnLiteParser } from './parser/BpmnLiteParser.js';
 import { TranspilerManager } from './transpilers/TranspilerManager.js';
 import { BpmnDocument } from './types/ast.js';
 
-// Initialize Mermaid
-mermaid.initialize({
-  startOnLoad: false,
-  theme: 'default',
-  securityLevel: 'loose',
-  flowchart: {
-    useMaxWidth: false,
-    htmlLabels: true
-  }
-});
-
 // Sample DSL for initial editor content
 const sampleDSL = `:Order Process
 
@@ -36,242 +25,188 @@ const sampleDSL = `:Order Process
 #OrderData place order`;
 
 /**
- * Main editor class
+ * Super simple BPMN editor class
  */
-export class BpmnLiteEditor {
-  private editor!: monaco.editor.IStandaloneCodeEditor; // Using the definite assignment assertion
+export class SimpleBpmnEditor {
+  private editor: HTMLTextAreaElement | null = null;
   private parser: BpmnLiteParser;
   private transpilerManager: TranspilerManager;
   private currentFormat: string = 'mermaid';
   private showAst: boolean = false;
   
   /**
-   * Create a new BpmnLiteEditor
+   * Create a new SimpleBpmnEditor
    */
   constructor() {
-    this.parser = new BpmnLiteParser();
-    this.transpilerManager = new TranspilerManager();
-    
-    // Initialize Monaco Editor
-    this.initMonacoEditor();
-    
-    // Set up event listeners
-    this.setupEventListeners();
-    
-    // Initial update will happen after editor initialization
-  }
-  
-  /**
-   * Initialize Monaco Editor
-   */
-  private initMonacoEditor(): void {
-    // Configure Monaco loader
-    require.config({ paths: { 'vs': 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.36.1/min/vs' } });
-    
-    // Load Monaco Editor
-    require(['vs/editor/editor.main'], () => {
-      // Register BPMN-lite language
-      this.registerBpmnLiteLanguage();
-      
-      // Create editor
-      this.editor = monaco.editor.create(document.getElementById('editor')!, {
-        value: sampleDSL,
-        language: 'bpmn-lite',
-        theme: 'vs-dark',
-        automaticLayout: true,
-        minimap: {
-          enabled: true
-        }
-      });
-      
-      // Set up change listener
-      const debounce = (func: Function, delay: number) => {
-        let timeoutId: number | null = null;
-        return (...args: any[]) => {
-          if (timeoutId) clearTimeout(timeoutId);
-          timeoutId = setTimeout(() => func(...args), delay);
-        };
-      };
-
-      const debouncedUpdatePreview = debounce(() => this.updatePreview(), 300);
-
-      this.editor.onDidChangeModelContent(() => {
-        debouncedUpdatePreview();
-      });
-
-      // Perform initial update *after* editor is created
-      this.updatePreview();
-    });
-  }
-  
-  /**
-   * Register BPMN-lite language in Monaco Editor
-   */
-  private registerBpmnLiteLanguage(): void {
-    monaco.languages.register({ id: 'bpmn-lite' });
-    
-    monaco.languages.setMonarchTokensProvider('bpmn-lite', {
-      tokenizer: {
-        root: [
-          [/^:.*$/, 'process'],
-          [/^@.*$/, 'lane'],
-          [/^\s*\?.*$/, 'gateway'],
-          [/^\s*[+\-=~].*$/, 'branch'],
-          [/^\s*{.*$/, 'parallel-start'],
-          [/^\s*}.*$/, 'parallel-end'],
-          [/^\s*!.*$/, 'event'],
-          [/^\s*\[.*\]/, 'subprocess'],
-          [/^\s*#.*$/, 'data-object'],
-          [/^\s*\$.*$/, 'data-store'],
-          [/^\s*".*$/, 'comment'],
-          [/\/\/.*$/, 'technical-comment'],
-        ]
+    // Initialize Mermaid here to avoid race conditions
+    // @ts-ignore - mermaid is loaded via script tag
+    window.mermaid.initialize({
+      startOnLoad: false,
+      theme: 'default',
+      securityLevel: 'loose',
+      flowchart: {
+        useMaxWidth: false,
+        htmlLabels: true
       }
     });
     
-    monaco.editor.defineTheme('bpmn-lite-theme', {
-      base: 'vs-dark',
-      inherit: true,
-      rules: [
-        { token: 'process', foreground: '569cd6', fontStyle: 'bold' },
-        { token: 'lane', foreground: '4ec9b0' },
-        { token: 'gateway', foreground: 'c586c0' },
-        { token: 'branch', foreground: 'ce9178' },
-        { token: 'parallel-start', foreground: 'd7ba7d' },
-        { token: 'parallel-end', foreground: 'd7ba7d' },
-        { token: 'event', foreground: 'dcdcaa' },
-        { token: 'subprocess', foreground: '4fc1ff' },
-        { token: 'data-object', foreground: '9cdcfe' },
-        { token: 'data-store', foreground: '4fc1ff' },
-        { token: 'comment', foreground: '6a9955' },
-        { token: 'technical-comment', foreground: '6a9955', fontStyle: 'italic' },
-      ],
-      colors: {}
+    this.parser = new BpmnLiteParser();
+    this.transpilerManager = new TranspilerManager();
+    
+    // Wait for DOM to be ready
+    document.addEventListener('DOMContentLoaded', () => {
+      this.initEditor();
+      this.setupEventListeners();
     });
     
-    monaco.editor.setTheme('bpmn-lite-theme');
+    // Also try to initialize if called after DOMContentLoaded
+    if (document.readyState === 'complete' || document.readyState === 'interactive') {
+      setTimeout(() => {
+        this.initEditor();
+        this.setupEventListeners();
+      }, 1);
+    }
+  }
+  
+  /**
+   * Initialize the editor (simple textarea)
+   */
+  private initEditor(): void {
+    this.editor = document.getElementById('code-editor') as HTMLTextAreaElement;
+    if (!this.editor) {
+      console.error('Editor element not found');
+      return;
+    }
+    
+    // Set default content
+    this.editor.value = sampleDSL;
   }
   
   /**
    * Set up event listeners
    */
   private setupEventListeners(): void {
-    const formatSelector = document.getElementById('preview-format') as HTMLSelectElement;
+    // Format selector
+    const formatSelector = document.getElementById('preview-format');
     if (formatSelector) {
-        formatSelector.addEventListener('change', () => {
-            console.log('Format selector changed');
-            this.currentFormat = formatSelector.value;
-            this.updatePreview();
-        });
+      formatSelector.addEventListener('change', (e) => {
+        const target = e.target as HTMLSelectElement;
+        this.currentFormat = target.value;
+        this.renderPreview();
+      });
     } else {
-        console.error('Format selector element not found');
+      console.error('Format selector not found');
     }
 
-    const toggleAstButton = document.getElementById('toggle-ast') as HTMLButtonElement;
+    // Toggle AST button
+    const toggleAstButton = document.getElementById('toggle-ast-button');
     if (toggleAstButton) {
-        toggleAstButton.addEventListener('click', () => {
-            console.log('AST toggle button clicked');
-            this.showAst = !this.showAst;
-            this.updatePreviewVisibility();
-        });
+      toggleAstButton.addEventListener('click', () => {
+        this.showAst = !this.showAst;
+        this.updatePreviewVisibility();
+      });
     } else {
-        console.error('AST toggle button element not found');
+      console.error('Toggle AST button not found');
     }
 
+    // Render button
+    const renderButton = document.getElementById('render-button');
+    if (renderButton) {
+      renderButton.addEventListener('click', () => {
+        this.renderPreview();
+      });
+    } else {
+      console.error('Render button not found');
+    }
+
+    // Tab switching
     const tabs = document.querySelectorAll('.preview-tab');
     if (tabs.length > 0) {
-        tabs.forEach(tab => {
-            tab.addEventListener('click', (e) => {
-                console.log('Tab clicked');
-                const target = e.target as HTMLElement;
-                const tabName = target.dataset.tab;
-
-                tabs.forEach(t => t.classList.remove('active'));
-                target.classList.add('active');
-
-                if (tabName === 'diagram') {
-                    document.getElementById('diagram-preview')?.classList.remove('hidden');
-                    document.getElementById('ast-preview')?.classList.add('hidden');
-                    this.showAst = false;
-                } else if (tabName === 'ast') {
-                    document.getElementById('diagram-preview')?.classList.add('hidden');
-                    document.getElementById('ast-preview')?.classList.remove('hidden');
-                    this.showAst = true;
-                }
-                this.updatePreview();
-            });
+      tabs.forEach(tab => {
+        tab.addEventListener('click', (e) => {
+          const target = e.currentTarget as HTMLElement;
+          const tabName = target.getAttribute('data-tab');
+          
+          // Update active tab
+          tabs.forEach(t => t.classList.remove('active'));
+          target.classList.add('active');
+          
+          // Show/hide corresponding content
+          if (tabName === 'diagram') {
+            this.showAst = false;
+            this.updatePreviewVisibility();
+          } else if (tabName === 'ast') {
+            this.showAst = true;
+            this.updatePreviewVisibility();
+          }
         });
+      });
     } else {
-        console.error('Preview tabs not found');
+      console.error('Preview tabs not found');
     }
+    
+    // Initial render
+    this.renderPreview();
   }
   
   /**
    * Update preview visibility based on showAst flag
    */
   private updatePreviewVisibility(): void {
-    const diagramPreview = document.getElementById('diagram-preview')!;
-    const astPreview = document.getElementById('ast-preview')!;
-    const diagramTab = document.querySelector('.preview-tab[data-tab="diagram"]')!;
-    const astTab = document.querySelector('.preview-tab[data-tab="ast"]')!;
+    const diagramPreview = document.getElementById('diagram-preview');
+    const astPreview = document.getElementById('ast-preview');
+    
+    if (!diagramPreview || !astPreview) {
+      console.error('Preview elements not found');
+      return;
+    }
     
     if (this.showAst) {
       diagramPreview.classList.add('hidden');
       astPreview.classList.remove('hidden');
-      diagramTab.classList.remove('active');
-      astTab.classList.add('active');
     } else {
       diagramPreview.classList.remove('hidden');
       astPreview.classList.add('hidden');
-      diagramTab.classList.add('active');
-      astTab.classList.remove('active');
     }
   }
   
   /**
-// Log start of updatePreview
-console.log('updatePreview started');
-   * Update the preview
+   * Render the preview based on the current editor content
    */
-  private updatePreview(): void {
+  private renderPreview(): void {
     if (!this.editor) {
+      console.error('Editor not initialized');
       return;
-// Log code being parsed
-const code = this.editor.getValue();
-console.log('Code:', code); // Log code after assignment
     }
     
-    const code = this.editor.getValue();
+    const code = this.editor.value;
+    console.log('Parsing code...');
     
-// Log before parsing
-console.log('Parsing DSL...');
     try {
-// Log after parsing
-console.log('AST:', ast);
       // Parse the DSL
       const ast = this.parser.parse(code);
+      console.log('AST created successfully');
       
       // Update AST preview
       this.updateAstPreview(ast);
-// Log before diagram preview update
-console.log('Updating diagram preview...');
       
       // Update diagram preview
       this.updateDiagramPreview(ast);
-// Log before hiding error container
-console.log('Hiding error container...');
       
       // Hide error container
-// Log error if caught
-console.error('Error caught:', error); // Move inside catch block
-      document.getElementById('error-container')!.classList.add('hidden');
-    } catch (error: any) { // Type assertion for error
-      // Show error
-      const errorContainer = document.getElementById('error-container')!;
-      errorContainer.textContent = `Error: ${error.message || 'Unknown error'}`;
-      errorContainer.classList.remove('hidden');
-      
+      const errorContainer = document.getElementById('error-container');
+      if (errorContainer) {
+        errorContainer.classList.add('hidden');
+      }
+    } catch (error: any) {
       console.error('BPMN-lite DSL parsing error:', error);
+      
+      // Show error
+      const errorContainer = document.getElementById('error-container');
+      if (errorContainer) {
+        errorContainer.textContent = `Error: ${error.message || 'Unknown error'}`;
+        errorContainer.classList.remove('hidden');
+      }
     }
   }
   
@@ -280,7 +215,11 @@ console.error('Error caught:', error); // Move inside catch block
    * @param ast The AST to display
    */
   private updateAstPreview(ast: BpmnDocument): void {
-    const astPreview = document.getElementById('ast-preview')!;
+    const astPreview = document.getElementById('ast-preview');
+    if (!astPreview) {
+      console.error('AST preview element not found');
+      return;
+    }
     astPreview.textContent = JSON.stringify(ast, null, 2);
   }
   
@@ -289,32 +228,41 @@ console.error('Error caught:', error); // Move inside catch block
    * @param ast The AST to display
    */
   private updateDiagramPreview(ast: BpmnDocument): void {
-    const mermaidPreview = document.getElementById('mermaid-preview')!;
+    const mermaidPreview = document.getElementById('mermaid-preview');
+    if (!mermaidPreview) {
+      console.error('Mermaid preview element not found');
+      return;
+    }
     
     // Get the transpiled code
     const transpiled = this.transpilerManager.transpile(ast, this.currentFormat);
+    console.log('Transpiled code:', transpiled);
     
     // Render the diagram
     if (this.currentFormat === 'mermaid') {
-      // Clear previous diagram
-      mermaidPreview.innerHTML = '';
-      
-      // Create a new diagram
-      const diagramId = `diagram-${Date.now()}`;
-      const diagramContainer = document.createElement('div');
-      diagramContainer.id = diagramId;
-      mermaidPreview.appendChild(diagramContainer);
-      
-      // Render Mermaid diagram
-      mermaid.render(diagramId, transpiled, (svgCode) => {
-        requestAnimationFrame(() => {
+      try {
+        // Clear previous diagram
+        mermaidPreview.innerHTML = '';
+        
+        // Create a new diagram
+        const diagramId = `diagram-${Date.now()}`;
+        const diagramContainer = document.createElement('div');
+        diagramContainer.id = diagramId;
+        mermaidPreview.appendChild(diagramContainer);
+        
+        // Render Mermaid diagram
+        // @ts-ignore - mermaid is loaded via script tag
+        window.mermaid.render(diagramId, transpiled, (svgCode: string) => {
           diagramContainer.innerHTML = svgCode;
+          console.log('Diagram rendered successfully');
         });
-      });
+      } catch (error) {
+        console.error('Error rendering Mermaid diagram:', error);
+        mermaidPreview.innerHTML = `<div class="error">Error rendering diagram: ${error instanceof Error ? error.message : 'Unknown error'}</div>`;
+      }
     } else {
       // For other formats, just show the code
       mermaidPreview.innerHTML = `<pre>${transpiled}</pre>`;
     }
   }
 }
-// Note: The initialization is now handled in the HTML file
