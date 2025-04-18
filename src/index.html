@@ -830,46 +830,118 @@
       }
 
       toMermaid() {
-        return `flowchart TD
+        // Start with flowchart definition and style classes
+        let mermaid = `flowchart TD
   %% Define node styles
-  classDef rect fill:#bbf,stroke:#33f,stroke-width:2px
-  classDef stadium fill:#bfb,stroke:#070,stroke-width:2px
-  classDef diamond fill:#fcc,stroke:#f00,stroke-width:2px
-  classDef note fill:#ffd,stroke:#bb0,stroke-width:1px
+  classDef task fill:#bbf,stroke:#33f,stroke-width:2px
+  classDef message fill:#bfb,stroke:#070,stroke-width:2px
+  classDef gateway fill:#fcc,stroke:#f00,stroke-width:2px
+  classDef comment fill:#ffd,stroke:#bb0,stroke-width:1px
+  classDef dataObject fill:#ececff,stroke:#9370db,stroke-width:1px
+  classDef branch fill:#d5ffd5,stroke:#3cb371,stroke-width:1px
+`;
 
-  data_orderdata[(OrderData)]
-  subgraph customer[Customer]
-    Customer_place_order[place order]:::rect
-    Customer_send_payment_information>send: Payment Information]:::stadium
-    Customer_comment_customer_waits_for_c[/Customer waits for confirmation/]:::note
-    Customer_receive_order_confirmation>receive: Order Confirmation]:::stadium
-  end
-  subgraph system[System]
-    System_receive_payment_information>receive: Payment Information]:::stadium
-    System_process_order[process order]:::rect
-    System_validate_payment[validate payment]:::rect
-    System_payment_successful{Payment successful?}:::diamond
-    System_post_payment["post payment"]:::rect
-    System_stop_order_processing["stop order processing"]:::rect
-    System_ship_order[ship order]:::rect
-    System_send_order_confirmation>send: Order Confirmation]:::stadium
-  end
-  style customer fill:#f9f9f9,stroke:#333,stroke-width:1px
-  style system fill:#e6f3ff,stroke:#333,stroke-width:1px
+        // Add data objects
+        this.dataObjects.forEach(dataObj => {
+          mermaid += `  ${dataObj.id}[(${dataObj.name})]:::dataObject\n`;
+        });
 
-  data_orderdata -.-> Customer_place_order
-  Customer_place_order --> Customer_send_payment_information
-  Customer_send_payment_information --> Customer_comment_customer_waits_for_c
-  Customer_comment_customer_waits_for_c --> Customer_receive_order_confirmation
-  System_receive_payment_information --> System_process_order
-  System_process_order --> System_validate_payment
-  System_validate_payment --> System_payment_successful
-  System_payment_successful -->|Yes| System_post_payment
-  System_payment_successful -->|No| System_stop_order_processing
-  System_post_payment --> System_ship_order
-  System_ship_order --> System_send_order_confirmation
-  Customer_send_payment_information -.->|Payment Information| System_receive_payment_information
-  System_send_order_confirmation -.->|Order Confirmation| Customer_receive_order_confirmation`;
+        // Group by lanes/pools
+        const laneNodes = {};
+        
+        // Collect nodes for each lane
+        Object.entries(this.lanes).forEach(([laneName, lane]) => {
+          const normalizedLaneName = this.normalizeId(laneName.replace('@', ''));
+          laneNodes[normalizedLaneName] = lane.tasks.filter(taskId => {
+            const task = this.tasks[taskId];
+            return task && task.type !== 'branch'; // Don't show branches in subgraphs
+          });
+        });
+        
+        // Add subgraphs for each lane
+        Object.entries(laneNodes).forEach(([laneName, taskIds]) => {
+          if (taskIds.length > 0) {
+            mermaid += `  subgraph ${laneName}[${laneName}]\n`;
+            
+            // Add nodes for each task in the lane
+            taskIds.forEach(taskId => {
+              const task = this.tasks[taskId];
+              
+              if (!task) return;
+              
+              switch(task.type) {
+                case 'task':
+                  mermaid += `    ${task.id}[${task.name}]:::task\n`;
+                  break;
+                case 'send':
+                case 'receive':
+                  mermaid += `    ${task.id}>${task.name}]:::message\n`;
+                  break;
+                case 'gateway':
+                  mermaid += `    ${task.id}{${task.name}?}:::gateway\n`;
+                  break;
+                case 'comment':
+                  mermaid += `    ${task.id}[/${task.name}/]:::comment\n`;
+                  break;
+              }
+            });
+            
+            mermaid += `  end\n`;
+          }
+        });
+        
+        // Add branch nodes
+        Object.values(this.tasks).forEach(task => {
+          if (task.type === 'branch') {
+            mermaid += `  ${task.id}["${task.name}"]:::branch\n`;
+          }
+        });
+        
+        // Add lane styles
+        Object.keys(laneNodes).forEach((laneName, index) => {
+          const color = index % 2 === 0 ? 
+            'fill:#f9f9f9,stroke:#333,stroke-width:1px' : 
+            'fill:#e6f3ff,stroke:#333,stroke-width:1px';
+          mermaid += `  style ${laneName} ${color}\n`;
+        });
+        
+        // Add connections
+        mermaid += '\n';
+        
+        // Add normal sequence flows
+        this.connections.forEach(conn => {
+          if (conn.type === 'sequenceFlow') {
+            // Check if this is a gateway-to-branch connection
+            const source = this.tasks[conn.sourceRef];
+            const target = this.tasks[conn.targetRef];
+            
+            if (source && target) {
+              if (source.type === 'gateway' && target.type === 'branch') {
+                // Special formatting for gateway branches with labels
+                mermaid += `  ${conn.sourceRef} -->|${target.label}| ${conn.targetRef}\n`;
+              } else {
+                mermaid += `  ${conn.sourceRef} --> ${conn.targetRef}\n`;
+              }
+            }
+          }
+        });
+        
+        // Add message flows with dashed lines and labels
+        this.connections.forEach(conn => {
+          if (conn.type === 'messageFlow') {
+            const label = conn.name ? `|${conn.name}|` : '';
+            mermaid += `  ${conn.sourceRef} -.->${ label } ${conn.targetRef}\n`;
+          }
+        });
+        
+        // Add data associations with dashed lines
+        this.connections.forEach(conn => {
+          if (conn.type === 'dataAssociation') {
+            mermaid += `  ${conn.sourceRef} -.-> ${conn.targetRef}\n`;
+          }
+        });
+        
+        return mermaid;
       }
     }
   </script>
@@ -945,7 +1017,7 @@
     
     // Run tests after page loads
     window.addEventListener('load', () => {
-      console.log("%c BPMN-lite Parser Demo v1.0.7 (2025-04-18 16:15) LOADED", "background: yellow; color: black; font-size: 20px");
+      console.log("%c BPMN-lite Parser Demo v1.0.8 (2025-04-18 17:30) LOADED", "background: yellow; color: black; font-size: 20px");
       const testResults = runGatewayTests();
       console.log("Gateway tests completed, check console for results");
       
@@ -959,7 +1031,7 @@
         outputDiv.style.padding = '10px';
         outputDiv.style.zIndex = '1000';
         outputDiv.style.border = '2px solid black';
-        outputDiv.innerHTML = `Version: v1.0.7 (2025-04-18 16:15)<br>
+        outputDiv.innerHTML = `Version: v1.0.8 (2025-04-18 17:30)<br>
                               Test Results: ${testResults.filter(t => t.success).length}/${testResults.length} passed`;
         document.body.appendChild(outputDiv);
       }, 2000);
@@ -968,7 +1040,7 @@
 </head>
 <body>
   <header>
-    <div class="title">BPMN-lite Parser Demo v1.0.7 (2025-04-18 16:15)</div>
+    <div class="title">BPMN-lite Parser Demo v1.0.8 (2025-04-18 17:30)</div>
     <div id="version-marker" style="background-color: yellow; color: black; padding: 5px; font-weight: bold;">NEW VERSION LOADED</div>
   </header>
   
