@@ -365,22 +365,26 @@
         
         let taskType = 'task';
         let taskName = line;
+        let originalName = line; // Keep the original name for display
         
         // Check task type based on prefix
         if (line.startsWith('send:')) {
           taskType = 'send';
-          taskName = line.substring(5).trim();
+          taskName = line.substring(5).trim(); // Extract just the message name
+          originalName = `send: ${taskName}`; // Keep the "send:" prefix in display name
         } else if (line.startsWith('receive:')) {
           taskType = 'receive';
-          taskName = line.substring(8).trim();
+          taskName = line.substring(8).trim(); // Extract just the message name
+          originalName = `receive: ${taskName}`; // Keep the "receive:" prefix in display name
         }
         
         const laneName = this.currentLane.replace('@', '');
-        const taskId = `${laneName}_${this.normalizeId(taskName)}`;
+        const taskId = `${laneName}_${this.normalizeId(originalName)}`; // Use normalized version of full name
         
         this.tasks[taskId] = {
           type: taskType,
-          name: taskName,
+          name: originalName, // Use original name with prefix for display
+          messageName: taskType === 'send' || taskType === 'receive' ? taskName : null, // Store message name separately
           id: taskId,
           lane: laneName
         };
@@ -388,10 +392,17 @@
         this.lanes[this.currentLane].tasks.push(taskId);
         
         // Add task to scope for reference in connections
+        // Use simplified name without prefixes for lookup
         const simpleName = this.normalizeId(taskName);
         this.taskScope[simpleName] = taskId;
         this.taskScope[`${laneName}.${simpleName}`] = taskId;
         this.taskScope[`@${laneName}.${simpleName}`] = taskId;
+        
+        // Also add the full name with prefix for reference
+        const fullName = this.normalizeId(originalName);
+        this.taskScope[fullName] = taskId;
+        this.taskScope[`${laneName}.${fullName}`] = taskId;
+        this.taskScope[`@${laneName}.${fullName}`] = taskId;
         
         return taskId;
       }
@@ -440,10 +451,22 @@
         const laneName = this.currentLane.replace('@', '');
         const branchId = `${laneName}_${this.normalizeId(branchName)}`;
         
+        // Check if this is a special format branch with custom label
+        let displayName = branchName;
+        let branchLabel = branchChar === '+' ? 'Yes' : 'No';
+        
+        // Check for custom label format |Label|content
+        if (branchName.startsWith('|') && branchName.includes('|', 1)) {
+          const labelEnd = branchName.indexOf('|', 1);
+          branchLabel = branchName.substring(1, labelEnd);
+          displayName = branchName.substring(labelEnd + 1).trim();
+        }
+        
         this.tasks[branchId] = {
           type: 'branch',
           branchType: branchChar === '+' ? 'positive' : 'negative',
-          name: branchName,
+          name: displayName,
+          label: branchLabel,
           id: branchId,
           lane: laneName,
           parentGateway: parentGateway
@@ -456,7 +479,7 @@
         this.lanes[this.currentLane].tasks.push(branchId);
         
         // Add branch to scope for reference
-        const simpleName = this.normalizeId(branchName);
+        const simpleName = this.normalizeId(displayName);
         this.taskScope[simpleName] = branchId;
         this.taskScope[`${laneName}.${simpleName}`] = branchId;
         this.taskScope[`@${laneName}.${simpleName}`] = branchId;
@@ -536,17 +559,19 @@
         const name = parts[0];
         const taskRef = parts.slice(1).join(' ');
         
-        const taskId = this.resolveTaskId(taskRef);
         const dataObjId = `data_${this.normalizeId(name)}`;
         
+        // Create data object even if there's no task reference
+        this.dataObjects.push({
+          type: 'dataObject',
+          name: name,
+          id: dataObjId,
+          taskRef: taskRef // Store the raw reference
+        });
+        
+        // If task reference can be resolved, create a connection
+        const taskId = this.resolveTaskId(taskRef);
         if (taskId) {
-          this.dataObjects.push({
-            type: 'dataObject',
-            name: name,
-            id: dataObjId,
-            taskRef: taskId
-          });
-          
           // Create a data association
           this.addConnection('data', dataObjId, taskId);
         }
@@ -581,8 +606,22 @@
               continue;
             }
             
-            // Skip comments
-            if (currentTask.type === 'comment') {
+            // For gateways, only connect from previous task to the gateway,
+            // but don't create sequential flow from gateway to next task
+            if (currentTask.type === 'gateway') {
+              if (prevTask) {
+                // Connect previous task to gateway
+                const connectionExists = this.connections.some(conn => 
+                  conn.type === 'sequenceFlow' && 
+                  conn.sourceRef === prevTask && 
+                  conn.targetRef === currentTaskId
+                );
+                
+                if (!connectionExists) {
+                  this.addConnection('flow', prevTask, currentTaskId);
+                }
+              }
+              // Don't update prevTask for gateway
               continue;
             }
             
@@ -605,16 +644,72 @@
           }
         });
         
-        // Connect matching send/receive tasks
+        // Connect gateway branches to their contents and to next task after gateway
+        Object.values(this.tasks).forEach(task => {
+          // Handle only gateways with branches
+          if (task.type !== 'gateway' || !task.branches || task.branches.length === 0) {
+            return;
+          }
+          
+          // Get positive and negative branches
+          const positiveBranches = task.branches.filter(branchId => 
+            this.tasks[branchId].branchType === 'positive'
+          );
+          
+          const negativeBranches = task.branches.filter(branchId => 
+            this.tasks[branchId].branchType === 'negative'
+          );
+          
+          // Find the next task after this gateway in the lane (implicit join)
+          const laneTaskIds = this.lanes[`@${task.lane}`].tasks;
+          const gatewayIndex = laneTaskIds.indexOf(task.id);
+          
+          // Find the next task after the gateway that's not a branch
+          let nextTaskAfterGateway = null;
+          if (gatewayIndex !== -1) {
+            for (let i = gatewayIndex + 1; i < laneTaskIds.length; i++) {
+              const potentialNextId = laneTaskIds[i];
+              const potentialNext = this.tasks[potentialNextId];
+              
+              // Skip branches of this gateway
+              if (potentialNext.type === 'branch' && 
+                  task.branches.includes(potentialNextId)) {
+                continue;
+              }
+              
+              nextTaskAfterGateway = potentialNextId;
+              break;
+            }
+          }
+          
+          // Connect branches to their content tasks
+          task.branches.forEach(branchId => {
+            const branch = this.tasks[branchId];
+            
+            // Connect the gateway directly to the branch (for rendering)
+            this.addConnection('flow', task.id, branchId);
+            
+            // If positive branch, also connect to the next task after gateway
+            if (branch.branchType === 'positive' && nextTaskAfterGateway) {
+              // Connect branch directly to next task (this will render as a direct gateway->task connection)
+              this.addConnection('flow', branchId, nextTaskAfterGateway);
+            }
+          });
+        });
+        
+        // Connect matching send/receive tasks by message name
         const sendTasks = Object.values(this.tasks).filter(task => task.type === 'send');
         const receiveTasks = Object.values(this.tasks).filter(task => task.type === 'receive');
         
         sendTasks.forEach(sendTask => {
-          const messageName = sendTask.name;
+          // Use the message name property, not the full task name
+          const messageName = sendTask.messageName;
           
-          // Find matching receive task
+          if (!messageName) return;
+          
+          // Find matching receive task with the same message name
           const matchingReceive = receiveTasks.find(receiveTask => 
-            receiveTask.name === messageName
+            receiveTask.messageName === messageName
           );
           
           if (matchingReceive) {
@@ -677,35 +772,81 @@
       toMermaid() {
         let mermaidCode = 'flowchart TD\n';
         
+        // Define node styles first to avoid reference errors
+        mermaidCode += '  %% Define node styles\n';
+        mermaidCode += '  classDef rect fill:#bbf,stroke:#33f,stroke-width:2px\n';
+        mermaidCode += '  classDef stadium fill:#bfb,stroke:#070,stroke-width:2px\n';
+        mermaidCode += '  classDef diamond fill:#fcc,stroke:#f00,stroke-width:2px\n';
+        mermaidCode += '  classDef note fill:#ffd,stroke:#bb0,stroke-width:1px\n\n';
+        
+        // Add data objects first
+        this.dataObjects.forEach(dataObj => {
+          mermaidCode += `  ${dataObj.id}[(${dataObj.name})]\n`;
+        });
+        
         // Add subgraphs for lanes
         Object.entries(this.lanes).forEach(([laneName, lane]) => {
           const laneId = this.normalizeId(laneName);
           mermaidCode += `  subgraph ${laneId}[${laneName.replace('@', '')}]\n`;
           
-          // Add tasks in this lane
+          // Add tasks in this lane (except branches)
           lane.tasks.forEach(taskId => {
             const task = this.tasks[taskId];
+            
+            // Skip branches entirely (handled in connections)
+            if (task.type === 'branch') {
+              return;
+            }
+            
             let shape = 'rect';
+            let displayName = task.name;
             
             // Different shapes based on task type
             if (task.type === 'gateway') {
               shape = 'diamond';
+              displayName = `${displayName}?`; // Add question mark for gateways
+              mermaidCode += `    ${task.id}{${displayName}}:::${shape}\n`;
             } else if (task.type === 'comment') {
-              shape = 'round';
+              shape = 'note';
+              mermaidCode += `    ${task.id}[/${displayName}/]:::${shape}\n`;
             } else if (task.type === 'send' || task.type === 'receive') {
               shape = 'stadium';
-            } else if (task.type === 'branch') {
-              shape = 'rect'; // Keep branches as rectangles
+              mermaidCode += `    ${task.id}>${displayName}]:::${shape}\n`;
+            } else {
+              // Default rectangular shape
+              mermaidCode += `    ${task.id}[${displayName}]:::${shape}\n`;
             }
-            
-            mermaidCode += `    ${task.id}[${task.name}]${shape}\n`;
           });
           
           mermaidCode += '  end\n';
         });
         
-        // Add connections
+        // Style subgraphs
+        mermaidCode += '  style customer fill:#f9f9f9,stroke:#333,stroke-width:1px\n';
+        mermaidCode += '  style system fill:#e6f3ff,stroke:#333,stroke-width:1px\n\n';
+        
+        // Add task flow connections (normal sequence flows)
+        // First, collect all the gateway->task connections to avoid duplicates
+        const gatewayConnections = new Set();
+        
         this.connections.forEach(conn => {
+          const source = this.tasks[conn.sourceRef];
+          const target = this.tasks[conn.targetRef];
+          
+          // Skip connections to/from branch nodes - we'll handle those specially
+          if (source && source.type === 'branch') {
+            return;
+          }
+          if (target && target.type === 'branch') {
+            return;
+          }
+          
+          // If it's a gateway flow, save it for later to avoid duplicates
+          if (source && source.type === 'gateway') {
+            gatewayConnections.add(`${conn.sourceRef} --> ${conn.targetRef}`);
+            return;
+          }
+          
           if (conn.type === 'sequenceFlow') {
             mermaidCode += `  ${conn.sourceRef} --> ${conn.targetRef}\n`;
           } else if (conn.type === 'messageFlow') {
@@ -715,9 +856,94 @@
           }
         });
         
-        // Add data objects
-        this.dataObjects.forEach(dataObj => {
-          mermaidCode += `  ${dataObj.id}[(${dataObj.name})]\n`;
+        // Find gateway branches and determine connections
+        const gatewayToTargets = {};
+        
+        Object.values(this.tasks).forEach(task => {
+          if (task.type === 'gateway' && task.branches && task.branches.length > 0) {
+            gatewayToTargets[task.id] = { positiveTargets: [], negativeTargets: [] };
+            
+            // Find branch targets
+            task.branches.forEach(branchId => {
+              const branch = this.tasks[branchId];
+              
+              // Find what this branch connects to
+              const targets = this.connections
+                .filter(conn => conn.sourceRef === branchId && conn.type === 'sequenceFlow')
+                .map(conn => conn.targetRef);
+              
+              if (branch.branchType === 'positive') {
+                gatewayToTargets[task.id].positiveTargets.push(...targets);
+              } else {
+                gatewayToTargets[task.id].negativeTargets.push(...targets);
+              }
+              
+              // Also try to find the next sequential task after gateway if not already found
+              if (gatewayToTargets[task.id].nextTask) {
+                return;
+              }
+              
+              // Find next task after gateway in lane
+              const laneTaskIds = this.lanes[`@${task.lane}`].tasks;
+              const gatewayIndex = laneTaskIds.indexOf(task.id);
+              
+              if (gatewayIndex !== -1) {
+                // Find the next non-branch task
+                for (let i = gatewayIndex + 1; i < laneTaskIds.length; i++) {
+                  const nextId = laneTaskIds[i];
+                  const nextTask = this.tasks[nextId];
+                  
+                  // Skip branches of this gateway
+                  if (nextTask.type === 'branch' && 
+                      task.branches.includes(nextId)) {
+                    continue;
+                  }
+                  
+                  gatewayToTargets[task.id].nextTask = nextId;
+                  break;
+                }
+              }
+            });
+          }
+        });
+        
+        // Add gateway connections with proper labels
+        Object.entries(gatewayToTargets).forEach(([gatewayId, targets]) => {
+          const gateway = this.tasks[gatewayId];
+          
+          // Find branch labels (using custom labels if they exist)
+          const positiveBranches = gateway.branches
+            .filter(branchId => this.tasks[branchId].branchType === 'positive')
+            .map(branchId => this.tasks[branchId]);
+          
+          const negativeBranches = gateway.branches
+            .filter(branchId => this.tasks[branchId].branchType === 'negative')
+            .map(branchId => this.tasks[branchId]);
+          
+          // Use first positive branch label for all positive connections
+          const positiveLabel = positiveBranches.length > 0 && positiveBranches[0].label 
+            ? positiveBranches[0].label 
+            : 'Yes';
+            
+          // Use first negative branch label for all negative connections
+          const negativeLabel = negativeBranches.length > 0 && negativeBranches[0].label
+            ? negativeBranches[0].label
+            : 'No';
+          
+          // Connect positive branches to their targets
+          targets.positiveTargets.forEach(targetId => {
+            mermaidCode += `  ${gatewayId} -->|${positiveLabel}| ${targetId}\n`;
+          });
+          
+          // Connect negative branches to their targets
+          targets.negativeTargets.forEach(targetId => {
+            mermaidCode += `  ${gatewayId} -->|${negativeLabel}| ${targetId}\n`;
+          });
+          
+          // Connect positive branch to the next sequential task if needed
+          if (targets.nextTask && !targets.positiveTargets.includes(targets.nextTask)) {
+            mermaidCode += `  ${gatewayId} -->|${positiveLabel}| ${targets.nextTask}\n`;
+          }
         });
         
         return mermaidCode;
@@ -779,8 +1005,8 @@
   process order
   validate payment
   ?Payment successful
-    +yes
-    -no
+    +post payment
+    -stop order processing
   ship order
   send: Order Confirmation
 
