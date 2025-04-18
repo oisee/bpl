@@ -4,6 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>BPMN-lite Parser Demo</title>
+  <!-- Import Mermaid library -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10.6.1/dist/mermaid.min.js"></script>
   <style>
     body {
       font-family: Arial, sans-serif;
@@ -1384,7 +1386,7 @@
     
     // Run tests after page loads
     window.addEventListener('load', () => {
-      console.log("%c BPMN-lite Parser Demo v1.5.0 (2025-04-18 21:00) LOADED", "background: yellow; color: black; font-size: 20px");
+      console.log("%c BPMN-lite Parser Demo v2.0.0 (2025-04-18 21:30) LOADED", "background: yellow; color: black; font-size: 20px");
       const testResults = runGatewayTests();
       console.log("Gateway tests completed, check console for results");
       
@@ -1398,8 +1400,9 @@
         outputDiv.style.padding = '10px';
         outputDiv.style.zIndex = '1000';
         outputDiv.style.border = '2px solid black';
-        outputDiv.innerHTML = `Version: v1.5.0 (2025-04-18 21:00)<br>
-                              Test Results: ${testResults.filter(t => t.success).length}/${testResults.length} passed`;
+        outputDiv.innerHTML = `Version: v2.0.0 (2025-04-18 21:30)<br>
+                              Test Results: ${testResults.filter(t => t.success).length}/${testResults.length} passed<br>
+                              Live Diagram Rendering Enabled!`;
         document.body.appendChild(outputDiv);
       }, 2000);
     });
@@ -1407,8 +1410,8 @@
 </head>
 <body>
   <header>
-    <div class="title">BPMN-lite Parser Demo v1.5.0 (2025-04-18 21:00)</div>
-    <div id="version-marker" style="background-color: yellow; color: black; padding: 5px; font-weight: bold;">NEW VERSION LOADED</div>
+    <div class="title">BPMN-lite Parser Demo v2.0.0 (2025-04-18 21:30)</div>
+    <div id="version-marker" style="background-color: yellow; color: black; padding: 5px; font-weight: bold;">LIVE DIAGRAM RENDERING ENABLED!</div>
   </header>
   
   <div class="main-container">
@@ -1435,7 +1438,17 @@
   </div>
   
   <script>
-    // No Mermaid initialization needed
+    // Initialize Mermaid
+    mermaid.initialize({
+      startOnLoad: true,
+      theme: 'default',
+      securityLevel: 'loose',
+      flowchart: {
+        useMaxWidth: false,
+        htmlLabels: true,
+        curve: 'basis'
+      }
+    });
 
     // Sample DSL
     const sampleDSL = `:Order Process
@@ -1462,6 +1475,17 @@
     // Current state
     let currentAst = null;
     let currentMermaid = null;
+    
+    // Debounce function to limit the rate of function calls
+    function debounce(func, wait) {
+      let timeout;
+      return function() {
+        const context = this;
+        const args = arguments;
+        clearTimeout(timeout);
+        timeout = setTimeout(() => func.apply(context, args), wait);
+      };
+    }
 
     // DOM elements
     const codeEditor = document.getElementById('code-editor');
@@ -1501,8 +1525,8 @@
       });
     });
     
-    // Parse button
-    parseButton.addEventListener('click', () => {
+    // Parse function
+    function parseDSL() {
       try {
         const parser = new BpmnLiteParser();
         currentAst = parser.parse(codeEditor.value);
@@ -1516,58 +1540,97 @@
         
         // Hide error
         errorContainer.style.display = 'none';
+        
+        return true;
       } catch (error) {
         errorContainer.textContent = `Error parsing DSL: ${error.message || 'Unknown error'}`;
         errorContainer.style.display = 'block';
         
         console.error('Error parsing DSL:', error);
+        return false;
       }
-    });
+    }
     
-    // Render button
-    renderButton.addEventListener('click', () => {
+    // Render function
+    function renderDiagram() {
       // Parse first if needed
       if (!currentMermaid) {
-        parseButton.click();
+        if (!parseDSL()) return;
       }
       
       if (currentMermaid) {
         try {
-          // Simply display the Mermaid code instead of rendering it
-          mermaidPreview.innerHTML = '<pre class="mermaid-code">' + currentMermaid + '</pre>';
+          // Clear previous diagram
+          mermaidPreview.innerHTML = '';
           
-          // Add some styling for the code display
-          const style = document.createElement('style');
-          style.textContent = `
-            .mermaid-code {
-              font-family: monospace;
-              white-space: pre-wrap;
-              background-color: #f5f5f5;
-              padding: 15px;
-              border-radius: 5px;
-              overflow: auto;
-              width: 100%;
-              height: 100%;
-              box-sizing: border-box;
-              margin: 0;
-            }
-          `;
-          document.head.appendChild(style);
+          // Create a unique ID for the diagram
+          const diagramId = 'mermaid-diagram-' + Date.now();
           
-          // Hide error
+          // Create a div for the diagram
+          const diagramDiv = document.createElement('div');
+          diagramDiv.className = 'mermaid';
+          diagramDiv.id = diagramId;
+          diagramDiv.textContent = currentMermaid;
+          
+          // Add to the preview container
+          mermaidPreview.appendChild(diagramDiv);
+          
+          // Render using Mermaid
+          mermaid.render(diagramId, currentMermaid)
+            .then(result => {
+              // Replace with the rendered SVG
+              mermaidPreview.innerHTML = result.svg;
+              
+              // Add some styling for better display
+              const svg = mermaidPreview.querySelector('svg');
+              if (svg) {
+                svg.style.maxWidth = '100%';
+                svg.style.height = 'auto';
+                svg.style.display = 'block';
+                svg.style.margin = '0 auto';
+              }
+            })
+            .catch(error => {
+              console.error('Mermaid rendering error:', error);
+              errorContainer.textContent = `Error rendering diagram: ${error.message || 'Unknown error'}`;
+              errorContainer.style.display = 'block';
+            });
+          
+          // Hide error if successful
           errorContainer.style.display = 'none';
         } catch (error) {
-          errorContainer.textContent = `Error displaying Mermaid code: ${error.message || 'Unknown error'}`;
+          errorContainer.textContent = `Error displaying Mermaid diagram: ${error.message || 'Unknown error'}`;
           errorContainer.style.display = 'block';
           
-          console.error('Error displaying Mermaid code:', error);
+          console.error('Error displaying Mermaid diagram:', error);
         }
       }
+    }
+    
+    // Live updating - debounced to avoid excessive updates
+    const updatePreview = debounce(() => {
+      parseDSL();
+      renderDiagram();
+    }, 300);
+    
+    // Add input event listener for live updates
+    codeEditor.addEventListener('input', updatePreview);
+    
+    // Parse button
+    parseButton.addEventListener('click', () => {
+      parseDSL();
+    });
+    
+    // Render button
+    renderButton.addEventListener('click', () => {
+      renderDiagram();
     });
     
     // Initial parse and render
-    parseButton.click();
-    renderButton.click();
+    setTimeout(() => {
+      parseDSL();
+      renderDiagram();
+    }, 100);
   </script>
 </body>
 </html>
