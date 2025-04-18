@@ -1,0 +1,47 @@
+flowchart TD
+  %% Define node styles
+  classDef event fill:#ffd,stroke:#33f,stroke-width:2px
+  classDef task fill:#bbf,stroke:#33f,stroke-width:2px
+  classDef message fill:#bfb,stroke:#070,stroke-width:2px
+  classDef gateway fill:#fcc,stroke:#f00,stroke-width:2px
+  classDef comment fill:#ffd,stroke:#bb0,stroke-width:1px
+  classDef dataObject fill:#ececff,stroke:#9370db,stroke-width:1px
+  classDef branch fill:#d5ffd5,stroke:#3cb371,stroke-width:1px
+  data_orderdata[(OrderData)]:::dataObject
+  subgraph customer[customer]
+    Customer_place_order[place order]:::task
+    Customer_send_payment_information>send: Payment Information]:::message
+    Customer_comment_customer_waits_for_c[/Customer waits for confirmation/]:::comment
+    Customer_receive_order_confirmation>receive: Order Confirmation]:::message
+  end
+  subgraph system[system]
+    System_receive_payment_information>receive: Payment Information]:::message
+    System_process_order[process order]:::task
+    System_validate_payment[validate payment]:::task
+    System_payment_successful{Payment successful?}:::gateway
+    System_post_payment["post payment"]:::branch
+    System_stop_order_processing["stop order processing"]:::branch
+    System_ship_order[ship order]:::task
+    System_send_order_confirmation>send: Order Confirmation]:::message
+  end
+  style customer fill:#f9f9f9,stroke:#333,stroke-width:1px
+  style system fill:#e6f3ff,stroke:#333,stroke-width:1px
+
+  %% Sequence flows
+  Customer_place_order --> Customer_send_payment_information
+  Customer_send_payment_information --> Customer_comment_customer_waits_for_c
+  Customer_comment_customer_waits_for_c --> Customer_receive_order_confirmation
+  System_receive_payment_information --> System_process_order
+  System_process_order --> System_validate_payment
+  System_validate_payment --> System_payment_successful
+  System_validate_payment --> System_ship_order
+  System_ship_order --> System_send_order_confirmation
+  System_payment_successful -->|Yes| System_post_payment
+  System_payment_successful -->|No| System_stop_order_processing
+  System_post_payment --> System_ship_order
+  Customer_receive_order_confirmation --> System_receive_payment_information
+  %% Message flows
+  Customer_send_payment_information -.->|Payment Information| System_receive_payment_information
+  System_send_order_confirmation -.->|Order Confirmation| Customer_receive_order_confirmation
+  %% Data flows
+  data_orderdata -.-> Customer_place_order
