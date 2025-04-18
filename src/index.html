@@ -147,6 +147,7 @@
         this.tasks = {};
         this.connections = [];
         this.dataObjects = [];
+        this.messages = [];
         this.events = [];
         this.currentProcess = null;
         this.currentLane = null;
@@ -162,6 +163,7 @@
         this.tasks = {};
         this.connections = [];
         this.dataObjects = [];
+        this.messages = [];
         this.events = [];
         this.currentProcess = null;
         this.currentLane = null;
@@ -241,7 +243,8 @@
               }))
           })),
           connections: this.connections,
-          dataObjects: this.dataObjects
+          dataObjects: this.dataObjects,
+          messages: this.messages
         };
 
         return ast;
@@ -556,51 +559,96 @@
       }
 
       parseConnection(line) {
-        // Format: ^Name source -> target
+        // Format: ^MessageName @Source.task -> @Target.task
         if (line.startsWith('^')) {
           try {
+            console.log(`Processing message flow: ${line}`);
+            
+            // Extract the entire line content after the ^ prefix
             const content = line.substring(1).trim();
-            const name = content.split(' ')[0]; // First word is the message name
             
-            // Find arrow in the remaining content
-            const arrowIndex = content.indexOf('->');
-            const reverseArrowIndex = content.indexOf('<-');
+            // First check for arrow
+            let sourcePart, targetPart, messageName, direction;
             
-            let arrow, arrowPos;
-            if (arrowIndex !== -1) {
-              arrow = '->';
-              arrowPos = arrowIndex;
-            } else if (reverseArrowIndex !== -1) {
-              arrow = '<-';
-              arrowPos = reverseArrowIndex;
+            if (content.includes('->')) {
+              [sourcePart, targetPart] = content.split('->').map(s => s.trim());
+              direction = 'forward';
+            } else if (content.includes('<-')) {
+              [targetPart, sourcePart] = content.split('<-').map(s => s.trim());
+              direction = 'backward';
             } else {
-              // No arrow found
-              console.log(`No arrow found in message flow: ${line}`);
+              // No arrow, assume it's just a message name (old format)
+              messageName = content;
+              // This is handled differently, return early
+              console.log(`Simple message name: ${messageName}`);
               return null;
             }
             
-            // Extract source and target, skipping the message name
-            let sourceStart = name.length + 1; // +1 for the space after name
-            const source = content.substring(sourceStart, arrowPos).trim();
-            const target = content.substring(arrowPos + arrow.length).trim();
-            const connectionType = arrow === '<-' ? 'backward' : 'forward';
-            
-            console.log(`Parsing message flow: "${name}" from "${source}" to "${target}"`);
-            
-            const sourceId = this.resolveTaskId(source);
-            const targetId = this.resolveTaskId(target);
-            
-            if (sourceId && targetId) {
-              if (connectionType === 'forward') {
-                this.addConnection('message', sourceId, targetId, name);
-              } else {
-                this.addConnection('message', targetId, sourceId, name);
-              }
+            // Process the source part - first word is the message name if it doesn't contain '@'
+            if (sourcePart.includes('@')) {
+              // Format is: MessageName @Source.task
+              const parts = sourcePart.split(' ');
+              messageName = parts[0];
+              const sourceRef = parts.slice(1).join(' ');
+              console.log(`Complex format - Message: "${messageName}", Source: "${sourceRef}", Target: "${targetPart}"`);
               
-              console.log(`Created message flow "${name}" from ${sourceId} to ${targetId}`);
-              return targetId; // Return the "end" of the connection
+              // Resolve source and target
+              const sourceId = this.resolveTaskId(sourceRef);
+              const targetId = this.resolveTaskId(targetPart);
+              
+              if (sourceId && targetId) {
+                // Create the message object
+                const messageId = `message_${this.normalizeId(messageName)}`;
+                
+                // Add to messages array if not already there
+                if (!this.messages.find(m => m.id === messageId)) {
+                  this.messages.push({
+                    type: 'message',
+                    name: messageName,
+                    id: messageId,
+                    sourceRef: sourceId,
+                    targetRef: targetId
+                  });
+                  console.log(`Added message: ${messageName} (${messageId})`);
+                }
+                
+                // Create connection in the right direction
+                this.addConnection('message', sourceId, targetId, messageName);
+                console.log(`SUCCESSFULLY added message flow: "${messageName}" from ${sourceId} to ${targetId}`);
+                
+                return targetId; // Return the target as the last referenced task
+              } else {
+                console.error(`Failed to resolve IDs: source="${sourceRef}" (${sourceId || 'null'}), target="${targetPart}" (${targetId || 'null'})`);
+              }
             } else {
-              console.log(`Failed to resolve task IDs for message flow "${name}": source="${source}" (${sourceId}), target="${target}" (${targetId})`);
+              // Simple format - source and target are directly provided
+              messageName = sourcePart;
+              console.log(`Simple format - Message: "${messageName}", Target: "${targetPart}"`);
+              
+              // Try to find a source (probably the last task)
+              const sourceId = this.lastTask;
+              const targetId = this.resolveTaskId(targetPart);
+              
+              if (sourceId && targetId) {
+                // Create the message object
+                const messageId = `message_${this.normalizeId(messageName)}`;
+                
+                // Add to messages array if not already there
+                if (!this.messages.find(m => m.id === messageId)) {
+                  this.messages.push({
+                    type: 'message',
+                    name: messageName,
+                    id: messageId,
+                    sourceRef: sourceId,
+                    targetRef: targetId
+                  });
+                  console.log(`Added message: ${messageName} (${messageId})`);
+                }
+                
+                this.addConnection('message', sourceId, targetId, messageName);
+                console.log(`SUCCESSFULLY added simple message flow: "${messageName}" from ${sourceId} to ${targetId}`);
+                return targetId;
+              }
             }
           } catch (error) {
             console.error(`Error parsing message flow: ${line}`, error);
@@ -611,29 +659,42 @@
       }
 
       parseDataObject(line) {
-        // Format: #Name task
-        const parts = line.substring(1).trim().split(' ');
-        const name = parts[0];
-        const taskRef = parts.slice(1).join(' ');
-        
-        const dataObjId = `data_${this.normalizeId(name)}`;
-        
-        // Create data object even if there's no task reference
-        this.dataObjects.push({
-          type: 'dataObject',
-          name: name,
-          id: dataObjId,
-          taskRef: taskRef // Store the raw reference
-        });
-        
-        // If task reference can be resolved, create a connection
-        const taskId = this.resolveTaskId(taskRef);
-        if (taskId) {
-          // Create a data association
-          this.addConnection('data', dataObjId, taskId);
+        // Format: #Name task_reference
+        try {
+          const content = line.substring(1).trim();
+          const parts = content.split(' ');
+          const name = parts[0];
+          const taskRef = parts.slice(1).join(' ');
+          
+          console.log(`Parsing data object: "${name}", task reference="${taskRef}"`);
+          
+          const dataObjId = `data_${this.normalizeId(name)}`;
+          
+          // Create data object even if there's no task reference
+          this.dataObjects.push({
+            type: 'dataObject',
+            name: name,
+            id: dataObjId,
+            taskRef: taskRef // Store the raw reference
+          });
+          
+          // If task reference can be resolved, create a connection
+          if (taskRef) {
+            const taskId = this.resolveTaskId(taskRef);
+            if (taskId) {
+              // Create a data association
+              this.addConnection('data', dataObjId, taskId);
+              console.log(`Added data association from ${dataObjId} to ${taskId}`);
+            } else {
+              console.log(`Failed to resolve task ID for data object association: "${taskRef}"`);
+            }
+          }
+          
+          return dataObjId;
+        } catch (error) {
+          console.error(`Error parsing data object: ${line}`, error);
+          return null;
         }
-        
-        return dataObjId;
       }
 
       addConnection(type, sourceId, targetId, name = '') {
@@ -840,6 +901,21 @@
             );
             
             if (!connectionExists) {
+              // Create the message object
+              const messageId = `message_${this.normalizeId(messageName)}`;
+              
+              // Add to messages array if not already there
+              if (!this.messages.find(m => m.id === messageId)) {
+                this.messages.push({
+                  type: 'message',
+                  name: messageName,
+                  id: messageId,
+                  sourceRef: sendTask.id,
+                  targetRef: matchingReceive.id
+                });
+                console.log(`Added implicit message: ${messageName} (${messageId})`);
+              }
+              
               this.addConnection('message', sendTask.id, matchingReceive.id, messageName);
             }
           }
@@ -1014,34 +1090,96 @@
         if (!taskRef) return null;
         
         taskRef = taskRef.trim();
+        console.log(`Resolving task ID for: "${taskRef}"`);
         
         // First try direct lookup
         if (this.taskScope[taskRef]) {
+          console.log(`  Direct lookup success: ${this.taskScope[taskRef]}`);
           return this.taskScope[taskRef];
         }
         
         // Try to normalize
         const normalized = this.normalizeId(taskRef);
         if (this.taskScope[normalized]) {
+          console.log(`  Normalized lookup success: ${this.taskScope[normalized]}`);
           return this.taskScope[normalized];
         }
         
-        // Try different variations
+        // If the reference includes a lane (has '@Lane.task' format)
         if (taskRef.includes('.')) {
           const parts = taskRef.split('.');
           
           if (parts.length === 2) {
             let [lane, task] = parts;
+            
+            // Remove @ prefix if present
             if (lane.startsWith('@')) {
               lane = lane.substring(1);
             }
             
-            // Try with and without @ prefix
-            return this.taskScope[`${lane}.${this.normalizeId(task)}`] || 
-                   this.taskScope[`@${lane}.${this.normalizeId(task)}`];
+            // Normalize task name
+            const normalizedTask = this.normalizeId(task);
+            
+            // Try various combinations
+            const lookups = [
+              `${lane}.${normalizedTask}`,
+              `@${lane}.${normalizedTask}`,
+              `${lane}_${normalizedTask}`
+            ];
+            
+            // Also try with lane name variations (lowercase, normalized)
+            const normalizedLane = this.normalizeId(lane);
+            lookups.push(
+              `${normalizedLane}.${normalizedTask}`,
+              `@${normalizedLane}.${normalizedTask}`,
+              `${normalizedLane}_${normalizedTask}`
+            );
+            
+            // Try each lookup
+            for (const lookup of lookups) {
+              if (this.taskScope[lookup]) {
+                console.log(`  Complex lookup success: ${this.taskScope[lookup]} (via ${lookup})`);
+                return this.taskScope[lookup];
+              }
+            }
+            
+            // Try direct lookup of the combined ID format (lane_task)
+            const directId = `${lane}_${normalizedTask}`;
+            if (this.tasks[directId]) {
+              console.log(`  Direct ID lookup success: ${directId}`);
+              return directId;
+            }
+            
+            // Try all tasks to find a matching name in the given lane
+            const laneTasks = Object.values(this.tasks).filter(t => 
+              t.lane && t.lane.toLowerCase() === lane.toLowerCase()
+            );
+            
+            // Find a task with a matching name in this lane
+            const matchingTask = laneTasks.find(t => 
+              this.normalizeId(t.name) === normalizedTask || 
+              (t.messageName && this.normalizeId(t.messageName) === normalizedTask)
+            );
+            
+            if (matchingTask) {
+              console.log(`  Lane tasks search success: ${matchingTask.id}`);
+              return matchingTask.id;
+            }
+          }
+        } else {
+          // If no lane specified, search all tasks for a name match
+          const matchingTask = Object.values(this.tasks).find(t => 
+            this.normalizeId(t.name) === normalized || 
+            (t.messageName && this.normalizeId(t.messageName) === normalized)
+          );
+          
+          if (matchingTask) {
+            console.log(`  Global name search success: ${matchingTask.id}`);
+            return matchingTask.id;
           }
         }
         
+        console.log(`  Resolution failed for: "${taskRef}"`);
         return null;
       }
 
@@ -1246,7 +1384,7 @@
     
     // Run tests after page loads
     window.addEventListener('load', () => {
-      console.log("%c BPMN-lite Parser Demo v1.3.1 (2025-04-18 20:15) LOADED", "background: yellow; color: black; font-size: 20px");
+      console.log("%c BPMN-lite Parser Demo v1.5.0 (2025-04-18 21:00) LOADED", "background: yellow; color: black; font-size: 20px");
       const testResults = runGatewayTests();
       console.log("Gateway tests completed, check console for results");
       
@@ -1260,7 +1398,7 @@
         outputDiv.style.padding = '10px';
         outputDiv.style.zIndex = '1000';
         outputDiv.style.border = '2px solid black';
-        outputDiv.innerHTML = `Version: v1.3.1 (2025-04-18 20:15)<br>
+        outputDiv.innerHTML = `Version: v1.5.0 (2025-04-18 21:00)<br>
                               Test Results: ${testResults.filter(t => t.success).length}/${testResults.length} passed`;
         document.body.appendChild(outputDiv);
       }, 2000);
@@ -1269,7 +1407,7 @@
 </head>
 <body>
   <header>
-    <div class="title">BPMN-lite Parser Demo v1.3.1 (2025-04-18 20:15)</div>
+    <div class="title">BPMN-lite Parser Demo v1.5.0 (2025-04-18 21:00)</div>
     <div id="version-marker" style="background-color: yellow; color: black; padding: 5px; font-weight: bold;">NEW VERSION LOADED</div>
   </header>
   
