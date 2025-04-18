@@ -784,6 +784,86 @@
             }
           }
         });
+        
+        // Connect across lanes for tasks that should follow each other
+        this.connectAcrossLanes();
+      }
+      
+      connectAcrossLanes() {
+        // Get all tasks sorted by their position in the process
+        const allLanes = Object.values(this.lanes);
+        const allTasksByPosition = [];
+        
+        // Flatten all tasks, maintaining their order from the lanes
+        allLanes.forEach(lane => {
+          lane.tasks.forEach(taskId => {
+            const task = this.tasks[taskId];
+            if (task && task.type !== 'branch') {
+              allTasksByPosition.push(task.id);
+            }
+          });
+        });
+        
+        // Add tasks not explicitly in lanes (if any)
+        Object.values(this.tasks).forEach(task => {
+          if (!allTasksByPosition.includes(task.id) && task.type !== 'branch') {
+            allTasksByPosition.push(task.id);
+          }
+        });
+        
+        // Last task of the previous lane should connect to the first task of the next lane
+        for (let i = 0; i < allLanes.length - 1; i++) {
+          const currentLane = allLanes[i];
+          const nextLane = allLanes[i + 1];
+          
+          // Skip if either lane is empty
+          if (currentLane.tasks.length === 0 || nextLane.tasks.length === 0) {
+            continue;
+          }
+          
+          // Find the last non-branch task in the current lane
+          let lastTaskInCurrentLane = null;
+          for (let j = currentLane.tasks.length - 1; j >= 0; j--) {
+            const taskId = currentLane.tasks[j];
+            const task = this.tasks[taskId];
+            if (task && task.type !== 'branch') {
+              lastTaskInCurrentLane = taskId;
+              break;
+            }
+          }
+          
+          // Find the first non-branch task in the next lane
+          let firstTaskInNextLane = null;
+          for (let j = 0; j < nextLane.tasks.length; j++) {
+            const taskId = nextLane.tasks[j];
+            const task = this.tasks[taskId];
+            if (task && task.type !== 'branch') {
+              firstTaskInNextLane = taskId;
+              break;
+            }
+          }
+          
+          // Connect them if both found
+          if (lastTaskInCurrentLane && firstTaskInNextLane) {
+            // Check if connection already exists
+            const connectionExists = this.connections.some(conn => 
+              conn.type === 'sequenceFlow' && 
+              conn.sourceRef === lastTaskInCurrentLane && 
+              conn.targetRef === firstTaskInNextLane
+            );
+            
+            // Also check if the target task is already connected to from something else
+            const targetAlreadyConnected = this.connections.some(conn =>
+              conn.type === 'sequenceFlow' &&
+              conn.targetRef === firstTaskInNextLane
+            );
+            
+            // Only add if no connection exists and target isn't already connected
+            if (!connectionExists && !targetAlreadyConnected) {
+              this.addConnection('flow', lastTaskInCurrentLane, firstTaskInNextLane);
+            }
+          }
+        }
       }
 
       resolveTaskId(taskRef) {
@@ -1015,7 +1095,7 @@
     
     // Run tests after page loads
     window.addEventListener('load', () => {
-      console.log("%c BPMN-lite Parser Demo v1.0.9 (2025-04-18 18:00) LOADED", "background: yellow; color: black; font-size: 20px");
+      console.log("%c BPMN-lite Parser Demo v1.1.0 (2025-04-18 18:30) LOADED", "background: yellow; color: black; font-size: 20px");
       const testResults = runGatewayTests();
       console.log("Gateway tests completed, check console for results");
       
@@ -1029,7 +1109,7 @@
         outputDiv.style.padding = '10px';
         outputDiv.style.zIndex = '1000';
         outputDiv.style.border = '2px solid black';
-        outputDiv.innerHTML = `Version: v1.0.9 (2025-04-18 18:00)<br>
+        outputDiv.innerHTML = `Version: v1.1.0 (2025-04-18 18:30)<br>
                               Test Results: ${testResults.filter(t => t.success).length}/${testResults.length} passed`;
         document.body.appendChild(outputDiv);
       }, 2000);
@@ -1038,7 +1118,7 @@
 </head>
 <body>
   <header>
-    <div class="title">BPMN-lite Parser Demo v1.0.9 (2025-04-18 18:00)</div>
+    <div class="title">BPMN-lite Parser Demo v1.1.0 (2025-04-18 18:30)</div>
     <div id="version-marker" style="background-color: yellow; color: black; padding: 5px; font-weight: bold;">NEW VERSION LOADED</div>
   </header>
   
