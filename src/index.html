@@ -482,8 +482,7 @@
         this.taskScope[`${laneName}.${simpleName}`] = branchId;
         this.taskScope[`@${laneName}.${simpleName}`] = branchId;
         
-        // Connect gateway to this branch
-        this.addConnection('flow', parentGateway, branchId);
+        // Note: Connections will be added in connectSequentialTasks() to avoid duplicates
         
         return branchId;
       }
@@ -849,12 +848,12 @@
         // Group by lanes/pools
         const laneNodes = {};
         
-        // Collect nodes for each lane
+        // Collect nodes for each lane (including branches)
         Object.entries(this.lanes).forEach(([laneName, lane]) => {
           const normalizedLaneName = this.normalizeId(laneName.replace('@', ''));
           laneNodes[normalizedLaneName] = lane.tasks.filter(taskId => {
             const task = this.tasks[taskId];
-            return task && task.type !== 'branch'; // Don't show branches in subgraphs
+            return task; // Include all task types in subgraphs
           });
         });
         
@@ -880,6 +879,9 @@
                 case 'gateway':
                   mermaid += `    ${task.id}{${task.name}?}:::gateway\n`;
                   break;
+                case 'branch':
+                  mermaid += `    ${task.id}["${task.name}"]:::branch\n`;
+                  break;
                 case 'comment':
                   mermaid += `    ${task.id}[/${task.name}/]:::comment\n`;
                   break;
@@ -890,12 +892,8 @@
           }
         });
         
-        // Add branch nodes
-        Object.values(this.tasks).forEach(task => {
-          if (task.type === 'branch') {
-            mermaid += `  ${task.id}["${task.name}"]:::branch\n`;
-          }
-        });
+        // Add branch nodes inside their parent lane subgraphs
+        // This is handled in the lane subgraph code already
         
         // Add lane styles
         Object.keys(laneNodes).forEach((laneName, index) => {
@@ -1017,7 +1015,7 @@
     
     // Run tests after page loads
     window.addEventListener('load', () => {
-      console.log("%c BPMN-lite Parser Demo v1.0.8 (2025-04-18 17:30) LOADED", "background: yellow; color: black; font-size: 20px");
+      console.log("%c BPMN-lite Parser Demo v1.0.9 (2025-04-18 18:00) LOADED", "background: yellow; color: black; font-size: 20px");
       const testResults = runGatewayTests();
       console.log("Gateway tests completed, check console for results");
       
@@ -1031,7 +1029,7 @@
         outputDiv.style.padding = '10px';
         outputDiv.style.zIndex = '1000';
         outputDiv.style.border = '2px solid black';
-        outputDiv.innerHTML = `Version: v1.0.8 (2025-04-18 17:30)<br>
+        outputDiv.innerHTML = `Version: v1.0.9 (2025-04-18 18:00)<br>
                               Test Results: ${testResults.filter(t => t.success).length}/${testResults.length} passed`;
         document.body.appendChild(outputDiv);
       }, 2000);
@@ -1040,7 +1038,7 @@
 </head>
 <body>
   <header>
-    <div class="title">BPMN-lite Parser Demo v1.0.8 (2025-04-18 17:30)</div>
+    <div class="title">BPMN-lite Parser Demo v1.0.9 (2025-04-18 18:00)</div>
     <div id="version-marker" style="background-color: yellow; color: black; padding: 5px; font-weight: bold;">NEW VERSION LOADED</div>
   </header>
   
