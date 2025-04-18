@@ -12,7 +12,7 @@ Create a robust parser for BPMN-lite DSL that generates an Abstract Syntax Tree 
 - **Cross-lane connectivity**: Automatically connects tasks across lanes.
 - **Gateway branches**: Processes XOR gateways with positive/negative branches.
 - **Custom branch labels**: Supports custom labels for gateway branches.
-- **Message flows**: Connects send/receive tasks, including message passing.
+- **Message flows**: Connects send/receive tasks and supports explicit labeled message connections (^Message source -> target).
 - **Data objects**: Handles data objects and their associations.
 - **Comments**: Processes both visible and hidden comments.
 

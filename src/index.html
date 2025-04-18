@@ -512,26 +512,30 @@
       parseConnection(line) {
         // Format: ^Name source -> target
         if (line.startsWith('^')) {
-          const parts = line.substring(1).trim().split(' ');
-          const name = parts[0];
+          const content = line.substring(1).trim();
+          const name = content.split(' ')[0]; // First word is the message name
           
-          // Find the arrow index
-          let arrowIndex = -1;
-          for (let i = 0; i < parts.length; i++) {
-            if (parts[i] === '->' || parts[i] === '<-') {
-              arrowIndex = i;
-              break;
-            }
-          }
+          // Find arrow in the remaining content
+          const arrowIndex = content.indexOf('->');
+          const reverseArrowIndex = content.indexOf('<-');
           
-          if (arrowIndex === -1) {
-            // No arrow found, but this could be a standalone message
+          let arrow, arrowPos;
+          if (arrowIndex !== -1) {
+            arrow = '->';
+            arrowPos = arrowIndex;
+          } else if (reverseArrowIndex !== -1) {
+            arrow = '<-';
+            arrowPos = reverseArrowIndex;
+          } else {
+            // No arrow found
             return null;
           }
           
-          const source = parts.slice(1, arrowIndex).join(' ');
-          const target = parts.slice(arrowIndex + 1).join(' ');
-          const connectionType = parts[arrowIndex] === '<-' ? 'backward' : 'forward';
+          // Extract source and target, skipping the message name
+          let sourceStart = name.length + 1; // +1 for the space after name
+          const source = content.substring(sourceStart, arrowPos).trim();
+          const target = content.substring(arrowPos + arrow.length).trim();
+          const connectionType = arrow === '<-' ? 'backward' : 'forward';
           
           const sourceId = this.resolveTaskId(source);
           const targetId = this.resolveTaskId(target);
@@ -543,7 +547,10 @@
               this.addConnection('message', targetId, sourceId, name);
             }
             
+            console.log(`Created message flow "${name}" from ${sourceId} to ${targetId}`);
             return targetId; // Return the "end" of the connection
+          } else {
+            console.log(`Failed to resolve task IDs for message flow "${name}": source="${source}", target="${target}"`);
           }
         }
         
@@ -1095,7 +1102,7 @@
     
     // Run tests after page loads
     window.addEventListener('load', () => {
-      console.log("%c BPMN-lite Parser Demo v1.1.0 (2025-04-18 18:30) LOADED", "background: yellow; color: black; font-size: 20px");
+      console.log("%c BPMN-lite Parser Demo v1.2.1 (2025-04-18 19:30) LOADED", "background: yellow; color: black; font-size: 20px");
       const testResults = runGatewayTests();
       console.log("Gateway tests completed, check console for results");
       
@@ -1109,7 +1116,7 @@
         outputDiv.style.padding = '10px';
         outputDiv.style.zIndex = '1000';
         outputDiv.style.border = '2px solid black';
-        outputDiv.innerHTML = `Version: v1.1.0 (2025-04-18 18:30)<br>
+        outputDiv.innerHTML = `Version: v1.2.1 (2025-04-18 19:30)<br>
                               Test Results: ${testResults.filter(t => t.success).length}/${testResults.length} passed`;
         document.body.appendChild(outputDiv);
       }, 2000);
@@ -1118,7 +1125,7 @@
 </head>
 <body>
   <header>
-    <div class="title">BPMN-lite Parser Demo v1.1.0 (2025-04-18 18:30)</div>
+    <div class="title">BPMN-lite Parser Demo v1.2.1 (2025-04-18 19:30)</div>
     <div id="version-marker" style="background-color: yellow; color: black; padding: 5px; font-weight: bold;">NEW VERSION LOADED</div>
   </header>
   

@@ -216,6 +216,13 @@ Or explicitly define message flows:
   record transaction
   process refunds
   generate reports
+
+// Explicit message flows with labels
+^CustomerCart @Customer.add items to cart -> @OrderSystem.manage cart
+^ShippingInfo @Customer.checkout -> @OrderSystem.process checkout
+^OrderRequest @OrderSystem.process order -> @Warehouse.receive: Order Request
+^PaymentRecord @OrderSystem.validate payment -> @Finance.receive: Order Details
+^DeliveryInfo @Warehouse.ship package -> @Customer.track shipment
 ```
 
 ## License

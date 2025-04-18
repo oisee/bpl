@@ -61,7 +61,9 @@ The editor interface consists of two main panels:
    - Positive branches: `+branch name` 
    - Negative branches: `-branch name`
    - Custom labels: `+|Custom Label| branch name`
-5. Add message flows with `send:` and `receive:` prefixes
+5. Add message flows:
+   - With `send:` and `receive:` prefixes for automatic matching
+   - Or with explicit connections: `^MessageName @SourceLane.task -> @TargetLane.task`
 6. Add data objects with `#DataName task`
 7. Add comments with `"This is a comment`
 
@@ -135,6 +137,13 @@ The editor interface consists of two main panels:
   record transaction
   process refunds
   generate reports
+
+// Explicit message flows with labels
+^CustomerCart @Customer.add items to cart -> @OrderSystem.manage cart
+^ShippingInfo @Customer.checkout -> @OrderSystem.process checkout
+^OrderRequest @OrderSystem.process order -> @Warehouse.receive: Order Request
+^PaymentRecord @OrderSystem.validate payment -> @Finance.receive: Order Details
+^DeliveryInfo @Warehouse.ship package -> @Customer.track shipment
 ```
 
 ## Viewing and Debugging
