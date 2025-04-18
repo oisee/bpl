@@ -147,6 +147,7 @@
         this.tasks = {};
         this.connections = [];
         this.dataObjects = [];
+        this.events = [];
         this.currentProcess = null;
         this.currentLane = null;
         this.lastTask = null;
@@ -161,6 +162,7 @@
         this.tasks = {};
         this.connections = [];
         this.dataObjects = [];
+        this.events = [];
         this.currentProcess = null;
         this.currentLane = null;
         this.lastTask = null;
@@ -307,6 +309,9 @@
           case '"': // Comment
             taskId = this.parseComment(line);
             break;
+          case '!': // Event
+            taskId = this.parseEvent(line);
+            break;
           case '/': // Technical comment (ignored)
             if (line.startsWith('//')) {
               // Ignore technical comments
@@ -326,6 +331,47 @@
         }
         
         return taskId;
+      }
+      
+      parseEvent(line) {
+        if (!this.currentLane) {
+          // Create a default lane if needed
+          this.parseLane('@Default');
+        }
+        
+        const eventName = line.substring(1).trim(); // Remove the ! prefix
+        const laneName = this.currentLane.replace('@', '');
+        let eventType = 'intermediate';
+        
+        // Determine event type based on common keywords
+        if (eventName.toLowerCase() === 'start') {
+          eventType = 'start';
+        } else if (eventName.toLowerCase() === 'end') {
+          eventType = 'end';
+        }
+        
+        const eventId = `${laneName}_${eventType}`;
+        
+        this.tasks[eventId] = {
+          type: 'event',
+          eventType: eventType,
+          name: eventName,
+          id: eventId,
+          lane: laneName
+        };
+        
+        this.lanes[this.currentLane].tasks.push(eventId);
+        
+        // Add event to scope for reference
+        const simpleName = this.normalizeId(eventName);
+        this.taskScope[simpleName] = eventId;
+        this.taskScope[`${laneName}.${simpleName}`] = eventId;
+        this.taskScope[`@${laneName}.${simpleName}`] = eventId;
+        
+        // Track event for special handling
+        this.events.push(eventId);
+        
+        return eventId;
       }
 
       ensureProcess(name) {
@@ -794,6 +840,9 @@
         
         // Connect across lanes for tasks that should follow each other
         this.connectAcrossLanes();
+        
+        // Special handling for start/end events
+        this.connectEvents();
       }
       
       connectAcrossLanes() {
@@ -872,6 +921,87 @@
           }
         }
       }
+      
+      connectEvents() {
+        // Process each lane to connect start/end events properly
+        Object.values(this.lanes).forEach(lane => {
+          // Find start events
+          const startEvents = lane.tasks.filter(taskId => {
+            const task = this.tasks[taskId];
+            return task && task.type === 'event' && task.eventType === 'start';
+          });
+          
+          // Find end events
+          const endEvents = lane.tasks.filter(taskId => {
+            const task = this.tasks[taskId];
+            return task && task.type === 'event' && task.eventType === 'end';
+          });
+          
+          // Connect start events to first non-event task
+          startEvents.forEach(startEventId => {
+            // Find the first regular task after the start event
+            let firstTaskAfterStart = null;
+            let startEventIndex = lane.tasks.indexOf(startEventId);
+            
+            for (let i = startEventIndex + 1; i < lane.tasks.length; i++) {
+              const taskId = lane.tasks[i];
+              const task = this.tasks[taskId];
+              
+              // Skip other events
+              if (task && task.type !== 'event' && task.type !== 'branch') {
+                firstTaskAfterStart = taskId;
+                break;
+              }
+            }
+            
+            // If found, connect them
+            if (firstTaskAfterStart) {
+              // Check if connection already exists
+              const connectionExists = this.connections.some(conn => 
+                conn.type === 'sequenceFlow' && 
+                conn.sourceRef === startEventId && 
+                conn.targetRef === firstTaskAfterStart
+              );
+              
+              if (!connectionExists) {
+                this.addConnection('flow', startEventId, firstTaskAfterStart);
+              }
+            }
+          });
+          
+          // Connect last non-event task to end events
+          endEvents.forEach(endEventId => {
+            // Find the last regular task before the end event
+            let lastTaskBeforeEnd = null;
+            let endEventIndex = lane.tasks.indexOf(endEventId);
+            
+            for (let i = endEventIndex - 1; i >= 0; i--) {
+              const taskId = lane.tasks[i];
+              const task = this.tasks[taskId];
+              
+              // Skip other events
+              if (task && task.type !== 'event' && task.type !== 'branch') {
+                lastTaskBeforeEnd = taskId;
+                break;
+              }
+            }
+            
+            // If found, connect them
+            if (lastTaskBeforeEnd) {
+              // Check if connection already exists
+              const connectionExists = this.connections.some(conn => 
+                conn.type === 'sequenceFlow' && 
+                conn.sourceRef === lastTaskBeforeEnd && 
+                conn.targetRef === endEventId
+              );
+              
+              if (!connectionExists) {
+                this.addConnection('flow', lastTaskBeforeEnd, endEventId);
+              }
+            }
+          });
+        });
+      }
 
       resolveTaskId(taskRef) {
         if (!taskRef) return null;
@@ -919,6 +1049,7 @@
         // Start with flowchart definition and style classes
         let mermaid = `flowchart TD
   %% Define node styles
+  classDef event fill:#ffd,stroke:#33f,stroke-width:2px
   classDef task fill:#bbf,stroke:#33f,stroke-width:2px
   classDef message fill:#bfb,stroke:#070,stroke-width:2px
   classDef gateway fill:#fcc,stroke:#f00,stroke-width:2px
@@ -971,6 +1102,9 @@
                   break;
                 case 'comment':
                   mermaid += `    ${task.id}[/${task.name}/]:::comment\n`;
+                  break;
+                case 'event':
+                  mermaid += `    ${task.id}([${task.name}]):::event\n`;
                   break;
               }
             });
@@ -1102,7 +1236,7 @@
     
     // Run tests after page loads
     window.addEventListener('load', () => {
-      console.log("%c BPMN-lite Parser Demo v1.2.1 (2025-04-18 19:30) LOADED", "background: yellow; color: black; font-size: 20px");
+      console.log("%c BPMN-lite Parser Demo v1.3.0 (2025-04-18 20:00) LOADED", "background: yellow; color: black; font-size: 20px");
       const testResults = runGatewayTests();
       console.log("Gateway tests completed, check console for results");
       
@@ -1116,7 +1250,7 @@
         outputDiv.style.padding = '10px';
         outputDiv.style.zIndex = '1000';
         outputDiv.style.border = '2px solid black';
-        outputDiv.innerHTML = `Version: v1.2.1 (2025-04-18 19:30)<br>
+        outputDiv.innerHTML = `Version: v1.3.0 (2025-04-18 20:00)<br>
                               Test Results: ${testResults.filter(t => t.success).length}/${testResults.length} passed`;
         document.body.appendChild(outputDiv);
       }, 2000);
@@ -1125,7 +1259,7 @@
 </head>
 <body>
   <header>
-    <div class="title">BPMN-lite Parser Demo v1.2.1 (2025-04-18 19:30)</div>
+    <div class="title">BPMN-lite Parser Demo v1.3.0 (2025-04-18 20:00)</div>
     <div id="version-marker" style="background-color: yellow; color: black; padding: 5px; font-weight: bold;">NEW VERSION LOADED</div>
   </header>
   
