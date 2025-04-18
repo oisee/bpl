@@ -1,0 +1,900 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BPMN-lite Parser Demo</title>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10.6.1/dist/mermaid.min.js"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    header {
+      background-color: #333;
+      color: white;
+      padding: 10px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .title {
+      font-size: 1.2em;
+      font-weight: bold;
+    }
+
+    .main-container {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+    }
+
+    .editor-container {
+      flex: 1;
+      height: 100%;
+      border-right: 1px solid #ccc;
+      display: flex;
+      flex-direction: column;
+      padding: 10px;
+    }
+
+    #code-editor {
+      width: 100%;
+      height: calc(100% - 50px);
+      font-family: monospace;
+      font-size: 14px;
+      resize: none;
+      padding: 10px;
+      box-sizing: border-box;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+    }
+
+    .editor-controls {
+      margin-top: 10px;
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+    }
+
+    .preview-container {
+      flex: 1;
+      height: 100%;
+      overflow: auto;
+      padding: 10px;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .preview-tabs {
+      display: flex;
+      border-bottom: 1px solid #ccc;
+      margin-bottom: 10px;
+    }
+
+    .preview-tab {
+      padding: 5px 10px;
+      cursor: pointer;
+      border: 1px solid transparent;
+    }
+
+    .preview-tab.active {
+      border: 1px solid #ccc;
+      border-bottom: none;
+      background-color: white;
+    }
+
+    .preview-content {
+      flex: 1;
+      overflow: auto;
+      display: none;
+    }
+
+    .preview-content.active {
+      display: block;
+    }
+
+    .ast-preview {
+      font-family: monospace;
+      white-space: pre-wrap;
+      padding: 10px;
+      background-color: #f5f5f5;
+      border-radius: 4px;
+      overflow: auto;
+      height: 100%;
+    }
+
+    .mermaid-preview {
+      height: 100%;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      overflow: auto; /* Add scroll for large diagrams */
+    }
+
+    .error {
+      color: red;
+      padding: 10px;
+      background-color: #ffeeee;
+      border-radius: 4px;
+      margin-bottom: 10px;
+      display: none;
+      white-space: pre-wrap; /* Preserve error formatting */
+    }
+
+    button {
+      padding: 5px 10px;
+      background-color: #4CAF50;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+
+    button:hover {
+      background-color: #45a049;
+    }
+  </style>
+  <script>
+    class BpmnLiteParser {
+      constructor() {
+        this.processes = [];
+        this.lanes = {}; // { '@LaneName': { process: 'ProcessName', tasks: [taskId1, taskId2] } }
+        this.tasks = {}; // { taskId: { type: 'task'/'gateway'/'event'..., name: '...', id: '...', lane: 'LaneName', ... } }
+        this.connections = []; // { type: 'sequenceFlow'/'messageFlow'/'dataAssociation', id: '...', name: '...', sourceRef: '...', targetRef: '...' }
+        this.dataObjects = []; // { type: 'dataObject', name: '...', id: '...', taskRef: 'optional raw task string', resolvedTaskId: 'optional resolved id', lane: 'optional resolved lane' }
+        this.messages = []; // { type: 'message', name: '...', id: '...', sourceRef: 'optional resolved id', targetRef: 'optional resolved id' }
+        this.events = []; // Stores event IDs for connection logic
+        this.currentProcess = null;
+        this.currentLane = null; // Stores the key like '@LaneName'
+        this.lastTask = null; // Stores the ID of the last processed task/element
+        this.taskScope = {}; // Maps various name variations to task IDs for resolution
+        this.gatewayStack = []; // Stores gateway IDs for branch association
+      }
+
+       // --- UTILITY FUNCTIONS ---
+      normalizeId(name) {
+        if (!name || typeof name !== 'string') return `unknown_${Date.now()}`;
+        // Replace non-alphanumeric with underscore, collapse multiples, trim ends
+        return name.trim().toLowerCase()
+          .replace(/[^a-z0-9]+/g, '_') // Replace disallowed chars (including @ . :)
+          .replace(/_+/g,'_')          // Collapse multiple underscores
+          .replace(/^_+|_+$/g, '');   // Trim leading/trailing underscores
+      }
+
+      stripComment(str) {
+          if (!str || typeof str !== 'string') return str;
+          const commentIndex = str.indexOf('//');
+          if (commentIndex !== -1) {
+              return str.substring(0, commentIndex).trim();
+          }
+          return str.trim();
+      }
+
+      // --- PARSING LOGIC ---
+      parse(text) {
+        // Reset state
+        this.processes = []; this.lanes = {}; this.tasks = {}; this.connections = [];
+        this.dataObjects = []; this.messages = []; this.events = []; this.taskScope = {};
+        this.gatewayStack = []; this.currentProcess = null; this.currentLane = null; this.lastTask = null;
+
+        const lines = text.split('\n');
+        this.ensureProcess("Default Process"); // Ensure default process
+
+        // --- First Pass: Collect elements ---
+        lines.forEach(originalLine => {
+          const line = originalLine.trim();
+          if (!line || line.startsWith('//')) return; // Skip empty/comment lines
+
+          const firstChar = line.charAt(0);
+          // Handle elements that might define connections directly
+          if (firstChar === '^') {
+            this.parseConnection(line);
+          } else if (firstChar === '#') {
+            this.parseDataObject(line);
+          } else {
+            this.processElementDefinition(line, firstChar);
+          }
+        });
+
+        // --- Second Pass: Create connections ---
+        this.connectSequentialTasks();
+        this.connectImplicitMessages();
+        this.connectGatewayBranches();
+        this.connectEvents();
+
+        // --- Build final AST ---
+        const ast = { /* ... (AST structure as before) ... */
+             type: 'bpmnModel',
+             processes: this.processes.map(processName => ({
+                 type: 'process',
+                 name: processName,
+                 id: this.normalizeId(processName),
+                 lanes: Object.entries(this.lanes)
+                 .filter(([_, laneData]) => laneData.process === processName)
+                 .map(([laneKey, laneData]) => ({
+                     type: 'lane',
+                     name: laneKey.replace('@', ''),
+                     id: this.normalizeId(laneKey), // Use normalized ID
+                     elements: laneData.tasks.map(taskId => this.tasks[taskId]).filter(Boolean)
+                 }))
+             })),
+             messages: this.messages,
+             dataObjects: this.dataObjects,
+             connections: this.connections
+        };
+        return ast;
+      }
+
+       processElementDefinition(line, firstChar) {
+          let elementId = null;
+          switch(firstChar) {
+              case ':': this.parseProcess(line); break;
+              case '@': this.parseLane(line); break;
+              case '?': elementId = this.parseGateway(line); break;
+              case '+':
+              case '-': elementId = this.parseGatewayBranch(line, firstChar); break;
+              case '"': elementId = this.parseComment(line); break;
+              case '!': elementId = this.parseEvent(line); break;
+              default: elementId = this.parseTask(line); break;
+          }
+          if (elementId) this.lastTask = elementId;
+          return elementId;
+      }
+
+      ensureProcess(name) {
+          const processName = name || "Default Process";
+          if (!this.processes.includes(processName)) this.processes.push(processName);
+          if (!this.currentProcess || name) this.currentProcess = processName;
+      }
+
+       ensureLane(name) {
+          const laneKey = name || '@DefaultLane'; // Use a default if none provided
+           // Ensure the process exists before creating the lane
+           this.ensureProcess(this.currentProcess);
+          if (!this.lanes[laneKey]) {
+              this.lanes[laneKey] = { process: this.currentProcess, tasks: [] };
+              console.log(`Ensured lane: ${laneKey} in process ${this.currentProcess}`);
+          }
+           if (!this.currentLane || name) { // Update context if new lane or no lane set
+                this.currentLane = laneKey;
+           }
+          return laneKey;
+      }
+
+      parseProcess(line) {
+          const processName = line.substring(1).trim();
+          if (processName) this.ensureProcess(processName);
+      }
+
+      parseLane(line) {
+          const laneName = line.trim();
+          if (laneName) {
+              this.ensureLane(laneName);
+              this.lastTask = null; // Reset context
+          }
+      }
+
+      parseTask(line) {
+          const currentLaneKey = this.ensureLane(this.currentLane);
+          const trimmedLine = line.trim();
+          if (!trimmedLine) return null;
+
+          let taskType = 'task', taskName = trimmedLine, messageName = null;
+          if (trimmedLine.toLowerCase().startsWith('send:')) {
+              taskType = 'send'; messageName = trimmedLine.substring(5).trim(); taskName = `send: ${messageName}`;
+          } else if (trimmedLine.toLowerCase().startsWith('receive:')) {
+              taskType = 'receive'; messageName = trimmedLine.substring(8).trim(); taskName = `receive: ${messageName}`;
+          }
+
+          const laneName = currentLaneKey.replace('@', '');
+          const taskId = `${laneName}_${this.normalizeId(taskName)}`; // Use normalized name for ID
+
+          this.tasks[taskId] = { type: taskType, name: taskName, messageName, id: taskId, lane: laneName };
+          this.lanes[currentLaneKey].tasks.push(taskId);
+
+           // Add to scope (using normalized core and full names)
+           const coreName = messageName ? messageName : taskName;
+           const normCore = this.normalizeId(coreName);
+           const normFull = this.normalizeId(taskName);
+           this.taskScope[normCore] = taskId;
+           this.taskScope[`${laneName}.${normCore}`] = taskId;
+           this.taskScope[`@${laneName}.${normCore}`] = taskId; // Allow @ prefix lookup
+           this.taskScope[normFull] = taskId;
+           this.taskScope[`${laneName}.${normFull}`] = taskId;
+           this.taskScope[`@${laneName}.${normFull}`] = taskId; // Allow @ prefix lookup
+
+
+          console.log(`Parsed Task: ID=${taskId}, Name="${taskName}", Lane=${laneName}, Type=${taskType}`);
+          return taskId;
+      }
+
+       parseGateway(line) {
+          const currentLaneKey = this.ensureLane(this.currentLane);
+          const gatewayName = line.substring(1).trim();
+          const laneName = currentLaneKey.replace('@', '');
+          const gatewayId = `${laneName}_${this.normalizeId(gatewayName)}`;
+
+          this.tasks[gatewayId] = { type: 'gateway', gatewayType: 'exclusive', name: gatewayName, id: gatewayId, lane: laneName, branches: [] };
+          this.lanes[currentLaneKey].tasks.push(gatewayId);
+
+           const normName = this.normalizeId(gatewayName);
+           this.taskScope[normName] = gatewayId;
+           this.taskScope[`${laneName}.${normName}`] = gatewayId;
+           this.taskScope[`@${laneName}.${normName}`] = gatewayId;
+
+
+          this.gatewayStack.push(gatewayId);
+          console.log(`Parsed Gateway: ID=${gatewayId}, Name="${gatewayName}", Lane=${laneName}`);
+          return gatewayId;
+      }
+
+      parseGatewayBranch(line, branchChar) {
+          const currentLaneKey = this.ensureLane(this.currentLane);
+          if (this.gatewayStack.length === 0) { console.warn(`Branch without gateway: ${line}`); return null; }
+
+          const parentGatewayId = this.gatewayStack[this.gatewayStack.length - 1];
+          const branchContent = line.substring(1).trim();
+          const laneName = currentLaneKey.replace('@', '');
+
+          let branchName = branchContent, branchLabel = branchChar === '+' ? 'Yes' : 'No';
+          const labelMatch = branchContent.match(/^\|([^|]+)\|\s*(.*)/);
+          if (labelMatch) { branchLabel = labelMatch[1]; branchName = labelMatch[2].trim(); }
+
+          // Use branch name OR label for ID if name is empty
+          const idBase = this.normalizeId(branchName || branchLabel);
+          const branchId = `${laneName}_${idBase}`;
+
+          this.tasks[branchId] = { type: 'branch', branchType: branchChar === '+' ? 'positive' : 'negative', name: branchName, label: branchLabel, id: branchId, lane: laneName, parentGateway: parentGatewayId };
+          this.lanes[currentLaneKey].tasks.push(branchId);
+
+          if (this.tasks[parentGatewayId]) this.tasks[parentGatewayId].branches.push(branchId);
+          else console.warn(`Parent gateway ${parentGatewayId} not found for branch ${branchId}`);
+
+          // Add to scope using normalized name OR label
+           const normName = this.normalizeId(branchName);
+           const normLabel = this.normalizeId(branchLabel);
+           if (normName) {
+               this.taskScope[normName] = branchId;
+               this.taskScope[`${laneName}.${normName}`] = branchId;
+               this.taskScope[`@${laneName}.${normName}`] = branchId;
+           }
+           // Add label lookup too, potentially overriding if name is empty
+           if (normLabel && (!normName || normName === normLabel)) {
+                this.taskScope[normLabel] = branchId;
+               this.taskScope[`${laneName}.${normLabel}`] = branchId;
+               this.taskScope[`@${laneName}.${normLabel}`] = branchId;
+           }
+
+
+          console.log(`Parsed Branch: ID=${branchId}, Name="${branchName}", Label="${branchLabel}", Parent=${parentGatewayId}`);
+          return branchId;
+      }
+
+      parseComment(line) {
+          const currentLaneKey = this.ensureLane(this.currentLane);
+          const commentText = line.substring(1).trim();
+          const laneName = currentLaneKey.replace('@', '');
+          const commentId = `${laneName}_comment_${this.normalizeId(commentText.substring(0, 15))}`;
+          this.tasks[commentId] = { type: 'comment', name: commentText, id: commentId, lane: laneName };
+          this.lanes[currentLaneKey].tasks.push(commentId);
+          console.log(`Parsed Comment: ID=${commentId}`);
+          return commentId;
+      }
+
+       parseEvent(line) {
+          const currentLaneKey = this.ensureLane(this.currentLane);
+          const eventContent = line.substring(1).trim();
+          const laneName = currentLaneKey.replace('@', '');
+          let eventType = 'intermediate', eventName = eventContent;
+
+          // Basic type/name extraction (can be enhanced)
+           if (eventContent.toLowerCase().startsWith('start')) { eventType = 'start'; eventName = eventContent.split(':')[1]?.trim() || 'Start'; }
+           else if (eventContent.toLowerCase().startsWith('end')) { eventType = 'end'; eventName = eventContent.split(':')[1]?.trim() || 'End'; }
+           else if (eventContent.includes(':')) { [eventType, eventName] = eventContent.split(':', 2).map(s => s.trim()); }
+
+          const eventId = `${laneName}_${eventType}_${this.normalizeId(eventName)}`;
+          this.tasks[eventId] = { type: 'event', eventType, name: eventName, id: eventId, lane: laneName };
+          this.lanes[currentLaneKey].tasks.push(eventId);
+          this.events.push(eventId);
+
+           const normName = this.normalizeId(eventName);
+           this.taskScope[normName] = eventId;
+           this.taskScope[`${laneName}.${normName}`] = eventId;
+           this.taskScope[`@${laneName}.${normName}`] = eventId;
+
+          console.log(`Parsed Event: ID=${eventId}, Type=${eventType}, Name="${eventName}"`);
+          return eventId;
+      }
+
+        parseConnection(line) {
+            if (!line.startsWith('^')) return null;
+            console.log(`Parsing Explicit Message Flow: ${line}`);
+
+            const content = this.stripComment(line.substring(1)); // Strip comment first
+
+            let arrow = '->', arrowIndex = content.indexOf('->');
+            if (arrowIndex === -1) { arrow = '<-'; arrowIndex = content.indexOf('<-'); }
+            if (arrowIndex === -1) { console.warn(`No arrow in flow: ${line}`); return null; }
+
+            const part1 = content.substring(0, arrowIndex).trim();
+            const part2 = content.substring(arrowIndex + 2).trim();
+
+            let messageName = '', sourceRefStr = '', targetRefStr = '';
+            const firstSpaceIndex = part1.indexOf(' ');
+            const firstAtIndex = part1.indexOf('@');
+            let nameEndIndex = -1;
+
+            if (firstAtIndex !== -1 && (firstSpaceIndex === -1 || firstAtIndex < firstSpaceIndex)) {
+                 nameEndIndex = firstAtIndex; // Name ends before first @
+            } else if (firstSpaceIndex !== -1) {
+                 nameEndIndex = firstSpaceIndex; // Name ends before first space
+            }
+
+            if (nameEndIndex !== -1) {
+                messageName = part1.substring(0, nameEndIndex).trim();
+                sourceRefStr = part1.substring(nameEndIndex).trim(); // Includes the '@...'
+            } else {
+                 messageName = part1; // Assumes format like ^MsgName -> Target
+                 if (this.lastTask && arrow === '->') {
+                      sourceRefStr = this.lastTask; // Use last task ID as implicit source
+                      console.warn(`Using last task ${this.lastTask} as implicit source for ^${messageName}`);
+                 } else {
+                      console.error(`Cannot determine source for message flow: ${line}`); return null;
+                 }
+            }
+
+            // Assign source/target based on arrow
+            if (arrow === '->') { targetRefStr = part2; }
+            else { targetRefStr = sourceRefStr; sourceRefStr = part2; } // Swap for <-
+
+             // Strip comments from extracted refs *again* just in case
+             sourceRefStr = this.stripComment(sourceRefStr);
+             targetRefStr = this.stripComment(targetRefStr);
+
+            console.log(`  Extracted: Name='${messageName}', Source='${sourceRefStr}', Target='${targetRefStr}'`);
+
+            const sourceId = this.resolveTaskId(sourceRefStr);
+            const targetId = this.resolveTaskId(targetRefStr);
+
+            if (sourceId && targetId) {
+                console.log(`  Resolved: SourceID='${sourceId}', TargetID='${targetId}'`);
+                const messageId = `message_${this.normalizeId(messageName)}`;
+                if (!this.messages.find(m => m.id === messageId)) {
+                    this.messages.push({ type: 'message', name: messageName, id: messageId, sourceRef: sourceId, targetRef: targetId });
+                }
+                this.addConnection('message', sourceId, targetId, messageName);
+                return targetId;
+            } else {
+                console.error(`Failed to resolve IDs for message flow: Source='${sourceRefStr}' (Resolved: ${sourceId || 'null'}), Target='${targetRefStr}' (Resolved: ${targetId || 'null'})`);
+                return null;
+            }
+        }
+
+
+      parseDataObject(line) {
+          const currentLaneKey = this.ensureLane(this.currentLane);
+          const content = this.stripComment(line.substring(1)); // Strip comment
+          let name = content, taskRef = null, resolvedTaskId = null;
+          let associatedLane = currentLaneKey.replace('@', '');
+
+          const parts = content.split('@');
+          if (parts.length > 1) {
+              name = parts[0].trim();
+              taskRef = '@' + parts.slice(1).join('@').trim(); // Includes the @
+              resolvedTaskId = this.resolveTaskId(taskRef);
+              if (resolvedTaskId && this.tasks[resolvedTaskId]) {
+                   associatedLane = this.tasks[resolvedTaskId].lane;
+              } else {
+                   associatedLane = 'unresolved_reference';
+                   console.warn(`Data object task ref unresolved: "${taskRef}"`);
+              }
+          } else {
+               console.log(`Data object "${name}" has no explicit task association.`);
+          }
+
+          const dataObjId = `data_${this.normalizeId(name)}`;
+          this.dataObjects.push({ type: 'dataObject', name, id: dataObjId, taskRef, resolvedTaskId, lane: associatedLane });
+          console.log(`Parsed Data Object: ID=${dataObjId}, Name="${name}", ResolvedTaskID=${resolvedTaskId}, Lane=${associatedLane}`);
+
+          if (resolvedTaskId) this.addConnection('data', dataObjId, resolvedTaskId);
+          return dataObjId;
+      }
+
+        addConnection(type, sourceId, targetId, name = '') {
+            if (!sourceId || !targetId || !this.tasks[sourceId] || !this.tasks[targetId]) { // Check if tasks exist
+                console.warn(`Cannot add connection: Invalid source (${sourceId}) or target (${targetId}) for type ${type}`);
+                return;
+            }
+            if (sourceId === targetId) { console.warn(`Skipping self-connection: ${sourceId}`); return; }
+
+            const connId = `conn_${this.normalizeId(sourceId)}_${this.normalizeId(targetId)}_${Math.random().toString(16).slice(2, 8)}`; // Add random suffix to avoid duplicates
+            const connectionType = type === 'flow' ? 'sequenceFlow' : type === 'message' ? 'messageFlow' : 'dataAssociation';
+
+            // Check for exact duplicates before adding
+            const exists = this.connections.some(c => c.type === connectionType && c.sourceRef === sourceId && c.targetRef === targetId && c.name === name);
+            if (!exists) {
+                this.connections.push({ type: connectionType, id: connId, name, sourceRef: sourceId, targetRef: targetId });
+            }
+        }
+
+        // --- Connection Logic ---
+        connectSequentialTasks() {
+            Object.values(this.lanes).forEach(laneData => {
+                let prevElementId = null;
+                for (const currentElementId of laneData.tasks) {
+                    const currentElement = this.tasks[currentElementId];
+                    if (!currentElement) continue;
+                    if (prevElementId) {
+                         const prevElement = this.tasks[prevElementId];
+                         // Basic sequential flow (Task -> Task, Task -> Gateway, Event -> Task, etc.)
+                         // Avoid connecting from diverging gateways or into branches here
+                         const canFlowFrom = prevElement && !['comment', 'branch', 'gateway'].includes(prevElement.type) && !(prevElement.type === 'event' && prevElement.eventType === 'end');
+                         const canFlowTo = currentElement && !['comment', 'branch'] && !(currentElement.type === 'event' && currentElement.eventType === 'start');
+
+                         if (canFlowFrom && canFlowTo) {
+                             this.addConnection('flow', prevElementId, currentElementId);
+                         }
+                    }
+                    // Update prevElementId only if it's part of the main flow
+                    if (!['comment', 'branch'].includes(currentElement.type)) {
+                         prevElementId = currentElementId;
+                    }
+                }
+            });
+        }
+
+      connectImplicitMessages() { /* ... (no changes needed here) ... */
+           console.log("Connecting implicit send/receive messages...");
+           const sendTasks = Object.values(this.tasks).filter(task => task.type === 'send' && task.messageName);
+           const receiveTasks = Object.values(this.tasks).filter(task => task.type === 'receive' && task.messageName);
+           sendTasks.forEach(sendTask => {
+               const matchingReceive = receiveTasks.find(r => r.messageName === sendTask.messageName);
+               if (matchingReceive) {
+                    const messageId = `message_${this.normalizeId(sendTask.messageName)}`;
+                   if (!this.messages.find(m => m.id === messageId)) {
+                       this.messages.push({ type: 'message', name: sendTask.messageName, id: messageId, sourceRef: sendTask.id, targetRef: matchingReceive.id });
+                   }
+                   this.addConnection('message', sendTask.id, matchingReceive.id, sendTask.messageName);
+               }
+           });
+       }
+
+
+      connectGatewayBranches() { /* ... (no changes needed here, uses addConnection now) ... */
+           console.log("Connecting gateway branches...");
+           Object.values(this.tasks).forEach(task => {
+               if (task.type === 'gateway' && task.branches?.length > 0) {
+                   const gatewayId = task.id;
+                   const laneTaskIds = this.lanes[`@${task.lane}`]?.tasks || [];
+                   const gatewayIndex = laneTaskIds.indexOf(gatewayId);
+                   let implicitJoinTargetId = null;
+                   if (gatewayIndex !== -1) {
+                       for (let i = gatewayIndex + 1; i < laneTaskIds.length; i++) {
+                            const nextTask = this.tasks[laneTaskIds[i]];
+                           if (nextTask && !['branch', 'gateway'].includes(nextTask.type) && nextTask.parentGateway !== gatewayId) {
+                               implicitJoinTargetId = laneTaskIds[i]; break;
+                           }
+                       }
+                   }
+                   task.branches.forEach(branchElementId => {
+                       const branchElement = this.tasks[branchElementId];
+                       if (!branchElement) return;
+                       this.addConnection('flow', gatewayId, branchElementId, branchElement.label); // Gateway -> Branch (Label)
+                       if (branchElement.branchType === 'positive' && implicitJoinTargetId) {
+                           this.addConnection('flow', branchElementId, implicitJoinTargetId); // Positive Branch -> Implicit Join
+                       }
+                   });
+               }
+           });
+       }
+
+      connectEvents() { /* ... (no changes needed here, uses addConnection now) ... */
+            console.log("Connecting start/end events...");
+           Object.entries(this.lanes).forEach(([laneKey, laneData]) => {
+               let firstRegularTask = null, lastRegularTask = null, startEventId = null, endEventId = null;
+               for (const taskId of laneData.tasks) {
+                   const task = this.tasks[taskId];
+                   if (!task) continue;
+                   if (task.type === 'event') {
+                       if (task.eventType === 'start' && !startEventId) startEventId = taskId;
+                       if (task.eventType === 'end' && !endEventId) endEventId = taskId; // Capture first end event
+                   } else if (!['comment', 'branch'].includes(task.type)) {
+                       if (!firstRegularTask) firstRegularTask = taskId;
+                       lastRegularTask = taskId;
+                   }
+               }
+               if (startEventId && firstRegularTask) this.addConnection('flow', startEventId, firstRegularTask);
+               else if (startEventId && endEventId && !firstRegularTask) this.addConnection('flow', startEventId, endEventId); // Start -> End if no tasks
+               if (lastRegularTask && endEventId) this.addConnection('flow', lastRegularTask, endEventId);
+           });
+       }
+
+      // --- Helper Functions ---
+      resolveTaskId(taskRef) {
+        if (!taskRef || typeof taskRef !== 'string') return null;
+        const ref = this.stripComment(taskRef.trim()); // Strip comment before resolving
+        console.log(`Resolving Task ID for: "${ref}"`);
+
+        // 1. Direct ID Check
+        if (this.tasks[ref]) { console.log(`  Resolved via Direct ID: ${ref}`); return ref; }
+        // 2. Direct Scope Lookup
+        if (this.taskScope[ref]) { console.log(`  Resolved via Scope (direct): ${this.taskScope[ref]}`); return this.taskScope[ref]; }
+        // 3. Normalized Scope Lookup
+        const normalizedRef = this.normalizeId(ref);
+        if (this.taskScope[normalizedRef]) { console.log(`  Resolved via Scope (normalized): ${this.taskScope[normalizedRef]}`); return this.taskScope[normalizedRef]; }
+
+        // 4. Handle Lane Prefix (@Lane.Task or Lane.Task)
+        if (ref.includes('.')) {
+          const parts = ref.split('.');
+          if (parts.length >= 2) {
+            let lanePart = parts[0];
+            let taskPart = parts.slice(1).join('.');
+            const lanePrefix = lanePart.startsWith('@') ? '' : '@';
+            const laneKey = `${lanePrefix}${lanePart}`;
+            const normalizedTaskPart = this.normalizeId(taskPart);
+
+            // Check scope with prefixes
+            const lookup1 = `${laneKey}.${normalizedTaskPart}`;
+            if (this.taskScope[lookup1]) { console.log(`  Resolved via Scope (prefixed lane): ${this.taskScope[lookup1]}`); return this.taskScope[lookup1]; }
+            const lookup2 = `${lanePart}.${normalizedTaskPart}`; // Check without @ prefix too
+            if (this.taskScope[lookup2]) { console.log(`  Resolved via Scope (non-prefixed lane): ${this.taskScope[lookup2]}`); return this.taskScope[lookup2]; }
+
+             // Try direct ID construction (e.g., lane_task_norm)
+             const constructedId = `${this.normalizeId(lanePart)}_${normalizedTaskPart}`;
+             if (this.tasks[constructedId]) { console.log(`  Resolved via constructed ID: ${constructedId}`); return constructedId; }
+          }
+        }
+
+        // 5. Global Name Match (fallback)
+        for (const taskId in this.tasks) {
+             const task = this.tasks[taskId];
+             // Check normalized task name OR normalized branch name OR normalized message name
+             if (this.normalizeId(task.name || '') === normalizedRef ||
+                 (task.messageName && this.normalizeId(task.messageName) === normalizedRef))
+              { console.log(`  Resolved via global name match: ${taskId}`); return taskId; }
+         }
+
+        console.warn(`  Resolution failed for: "${ref}"`);
+        return null;
+      }
+
+      // --- Mermaid Generation ---
+      toMermaid() {
+        let mermaid = `flowchart TD
+    %% --- Node Styles ---
+    classDef task fill:#bbf,stroke:#333,stroke-width:1px
+    classDef gateway fill:#f9f,stroke:#333,stroke-width:1px,rx:5,ry:5
+    classDef event fill:#fff,stroke:#333,stroke-width:1px,stroke-dasharray: 5 5
+    classDef data fill:#ffc,stroke:#333,stroke-width:1px,stroke-dasharray: 5 5
+    classDef comment fill:#efefef,stroke:#aaa,stroke-width:1px,rx:5,ry:5
+    classDef branch fill:#d5ffd5,stroke:#3cb371,stroke-width:1px
+    classDef messageTask fill:#bfb,stroke:#070,stroke-width:1px
+`;
+        mermaid += "\n    %% --- Data Objects ---\n";
+        this.dataObjects.forEach(dataObj => { mermaid += `    ${dataObj.id}[(${dataObj.name})]:::data\n`; });
+
+        mermaid += "\n    %% --- Lanes and Elements ---\n";
+        Object.entries(this.lanes).forEach(([laneKey, laneData]) => {
+          const laneName = laneKey.replace('@', '');
+          const laneId = this.normalizeId(laneKey); // USE NORMALIZED ID HERE
+          mermaid += `    subgraph ${laneId} [${laneName}]\n`; // Use laneId
+          laneData.tasks.forEach(taskId => {
+            const task = this.tasks[taskId];
+            if (!task) return;
+            const name = task.name ? task.name.replace(/\"/g, '#quot;') : '';
+            switch(task.type) {
+              case 'task': mermaid += `        ${task.id}["${name}"]:::task\n`; break;
+              case 'send': case 'receive': mermaid += `        ${task.id}["${name}"]:::messageTask\n`; break;
+              case 'gateway': mermaid += `        ${task.id}{{"${name}"}}:::gateway\n`; break;
+              case 'branch': mermaid += `        ${task.id}["${name || task.label}"]:::branch\n`; break;
+              case 'comment': mermaid += `        ${task.id}[/"${name}"/]:::comment\n`; break;
+              case 'event':
+                 if (task.eventType === 'start') mermaid += `        ${task.id}(("${name}")):::event\n`;
+                 else if (task.eventType === 'end') mermaid += `        ${task.id}((("${name}"))):::event\n`;
+                 else mermaid += `        ${task.id}(("${name}")):::event\n`;
+                 break;
+            }
+          });
+          mermaid += `    end\n`;
+        });
+
+        mermaid += "\n    %% --- Connections ---\n";
+        this.connections.forEach(conn => {
+          if (!conn.sourceRef || !conn.targetRef || !this.tasks[conn.sourceRef] || !this.tasks[conn.targetRef]) return;
+          const label = conn.name ? `|${conn.name.replace(/\|/g,'')}|` : ''; // Add label if present, remove internal pipes
+          switch(conn.type) {
+            case 'sequenceFlow': mermaid += `    ${conn.sourceRef} --${label}--> ${conn.targetRef}\n`; break;
+            case 'messageFlow': mermaid += `    ${conn.sourceRef} -.->${label} ${conn.targetRef}\n`; break;
+            case 'dataAssociation': mermaid += `    ${conn.sourceRef} -.-> ${conn.targetRef}\n`; break;
+          }
+        });
+        return mermaid;
+      }
+    } // End of BpmnLiteParser class
+  </script>
+
+  <script>
+      window.addEventListener('load', () => {
+           console.log("%c BPMN-lite Parser Demo v2.0.2 (Error Fixes) LOADED", "background: lightblue; color: black; font-size: 16px");
+          const outputDiv = document.getElementById('version-marker');
+          if (outputDiv) { outputDiv.textContent = 'v2.0.2 - Error Fixes'; outputDiv.style.backgroundColor = 'lightblue'; }
+      });
+  </script>
+</head>
+<body>
+  <header>
+    <div class="title">BPMN-lite Parser Demo</div>
+    <div id="version-marker" style="background-color: yellow; color: black; padding: 5px; font-weight: bold;">Loading...</div>
+  </header>
+   <div class="main-container">
+    <div class="editor-container">
+      <textarea id="code-editor" spellcheck="false"></textarea>
+      <div class="editor-controls">
+        <button id="parse-button">Parse DSL</button>
+        <button id="render-button">Render Diagram</button>
+      </div>
+    </div>
+    <div class="preview-container">
+      <div class="preview-tabs">
+        <div class="preview-tab active" data-tab="diagram">Diagram</div>
+        <div class="preview-tab" data-tab="ast">AST</div>
+        <div class="preview-tab" data-tab="mermaid">Mermaid Code</div>
+      </div>
+      <div id="error-container" class="error"></div>
+      <div id="diagram-preview" class="preview-content active">
+        <div id="mermaid-preview" class="mermaid-preview">Rendering...</div>
+      </div>
+      <div id="ast-preview" class="preview-content ast-preview"></div>
+      <div id="mermaid-code-preview" class="preview-content ast-preview"></div>
+    </div>
+  </div>
+
+  <script>
+    mermaid.initialize({ startOnLoad: false, theme: 'default', securityLevel: 'loose', flowchart: { useMaxWidth: false, htmlLabels: true, curve: 'basis' } });
+
+     const sampleDSL = `:Online Shopping Process
+@Customer
+  browse catalog
+  add items to cart
+  checkout
+  send: Shipping Address
+  send: Payment Information
+  "Waiting for confirmation
+  receive: Order Tracking Details
+  track shipment
+  receive: Delivery Notification
+  confirm receipt
+@OrderSystem
+  display products
+  manage cart
+  process checkout
+  receive: Shipping Address
+  receive: Payment Information
+  validate payment
+  ?Payment successful
+    +|Yes|process order // Using explicit label now matches branch parsing
+    -|No|send: Payment Failed // Using explicit label now matches branch parsing
+  reserve inventory
+  generate invoice
+  send: Order Tracking Details
+@Warehouse
+  receive: Order Request
+  check inventory
+  pick items
+  pack order
+  ?Express shipping
+    +|Yes|priority handling
+    -|No|standard handling
+  ship package
+  send: Tracking Information
+  send: Delivery Notification
+@Finance
+  receive: Order Details
+  record transaction
+  process refunds
+  generate reports
+
+// --- Explicit Flows --- Should work now
+^CustomerCart @Customer.add items to cart -> @OrderSystem.manage cart
+^ShippingInfo @Customer.checkout -> @OrderSystem.process checkout
+^OrderRequest @OrderSystem.process order -> @Warehouse.receive: Order Request // Note: Branch task 'process order' is the source
+^PaymentRecord @OrderSystem.validate payment -> @Finance.receive: Order Details
+^DeliveryInfo @Warehouse.ship package -> @Customer.track shipment
+^Tracking @Warehouse.send: Tracking Information -> @Customer.track shipment // Comment stripping test
+
+// --- Data Objects ---
+#ProductCatalog @OrderSystem.display products
+#CustomerAccount @Customer.browse catalog
+#InventoryDatabase @Warehouse.check inventory
+#ShippingRates @Warehouse.priority handling // Connect to branch task
+#PaymentGateway @OrderSystem.validate payment`;
+
+
+    let currentAst = null;
+    let currentMermaid = null;
+
+    function debounce(func, wait) { let timeout; return function() { const context = this, args = arguments; clearTimeout(timeout); timeout = setTimeout(() => func.apply(context, args), wait); }; }
+
+    const codeEditor = document.getElementById('code-editor');
+    const parseButton = document.getElementById('parse-button');
+    const renderButton = document.getElementById('render-button');
+    const mermaidPreview = document.getElementById('mermaid-preview');
+    const astPreview = document.getElementById('ast-preview');
+    const mermaidCodePreview = document.getElementById('mermaid-code-preview');
+    const errorContainer = document.getElementById('error-container');
+    const tabs = document.querySelectorAll('.preview-tab');
+    const previewContents = document.querySelectorAll('.preview-content');
+
+    codeEditor.value = sampleDSL;
+
+    tabs.forEach(tab => {
+      tab.addEventListener('click', () => {
+        const tabName = tab.getAttribute('data-tab');
+        tabs.forEach(t => t.classList.remove('active'));
+        tab.classList.add('active');
+        previewContents.forEach(content => content.classList.remove('active'));
+        const contentEl = document.getElementById(tabName + '-preview');
+        if (contentEl) contentEl.classList.add('active');
+        if (tabName === 'diagram' && currentMermaid) renderDiagram(false);
+      });
+    });
+
+    function parseDSL() {
+      console.clear(); console.log("--- Parsing DSL ---");
+      try {
+        const parser = new BpmnLiteParser();
+        currentAst = parser.parse(codeEditor.value);
+        console.log("--- AST ---", currentAst);
+        currentMermaid = parser.toMermaid();
+        console.log("--- Mermaid Code ---", currentMermaid);
+        astPreview.textContent = JSON.stringify(currentAst, null, 2);
+        mermaidCodePreview.textContent = currentMermaid;
+        errorContainer.style.display = 'none';
+        return true;
+      } catch (error) {
+        errorContainer.textContent = `Error parsing DSL: ${error.message || 'Unknown error'}\n${error.stack || ''}`;
+        errorContainer.style.display = 'block'; console.error('Error parsing DSL:', error);
+        currentAst = null; currentMermaid = null;
+        return false;
+      }
+    }
+
+    function renderDiagram(parseFirst = true) {
+      if (parseFirst && !parseDSL()) {
+        mermaidPreview.innerHTML = '<div style="color: red; padding: 10px;">Parsing Failed. Cannot Render.</div>';
+        return;
+      }
+      if (currentMermaid) {
+        console.log("--- Rendering Diagram ---");
+        mermaidPreview.innerHTML = '<div class="mermaid">' + currentMermaid + '</div>';
+        try {
+          mermaid.run({ nodes: [mermaidPreview.querySelector('.mermaid')] });
+          console.log("Mermaid rendering initiated.");
+          errorContainer.style.display = 'none';
+        } catch (error) {
+           errorContainer.textContent = `Error rendering Mermaid: ${error.message || 'Unknown error'}\n${error.stack || ''}`;
+           errorContainer.style.display = 'block'; console.error('Error rendering Mermaid:', error);
+           mermaidPreview.innerHTML = `<div style="color: red; padding: 10px;">Rendering Error: ${error.message}</div>`;
+        }
+      } else {
+        mermaidPreview.innerHTML = '<div style="color: gray; padding: 10px;">No diagram to render. Parse DSL first.</div>';
+      }
+    }
+
+    const updatePreview = debounce(() => { renderDiagram(true); }, 500);
+    codeEditor.addEventListener('input', updatePreview);
+    parseButton.addEventListener('click', () => parseDSL());
+    renderButton.addEventListener('click', () => renderDiagram(false));
+
+    setTimeout(() => { console.log("Initial parse and render..."); renderDiagram(true); }, 200); // Increased delay slightly
+  </script>
+</body>
+</html>
