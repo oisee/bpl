@@ -1,13 +1,21 @@
-# BPMN-lite DSL Editor
+# BPMN-lite DSL Parser and Editor
 
-A minimal, intuitive domain-specific language for describing business process diagrams that can be rendered to both BPMN and Mermaid formats.
+A minimal, intuitive domain-specific language for describing business process diagrams that can be parsed into an Abstract Syntax Tree (AST) and rendered to Mermaid flowcharts.
 
 ## Features
 
-- Text editor for BPMN-lite DSL with syntax highlighting
-- Real-time rendering to Mermaid diagrams
+- Whitespace-insensitive parsing
+- Line type detection by first non-whitespace character
+- Support for connections with -> and <- operators
+- Name resolution from local to wider scope
+- Normalized node IDs
+- Sequential connectivity within and across lanes
+- Gateway branches with custom labels
+- Message flows between send/receive tasks
+- Data objects and associations
+- Process and lane definitions
+- Comments and annotations
 - AST preview for debugging
-- Modular architecture to support additional backends (DOT, BPMN)
 
 ## Getting Started
 
@@ -65,13 +73,26 @@ Simple text lines after lane definition:
   task 2
 ```
 
-Tasks are automatically connected in sequence within the same lane.
+Tasks are automatically connected in sequence within the same lane and across lanes.
+
+Specialized tasks for sending and receiving messages:
+
+```
+  send: Payment Information
+  receive: Order Confirmation
+```
 
 Explicit connections can be made using `->`:
 
 ```
   task A -> task C  // Creates direct flow from A to C
   task A -> task C -> task E  // Creates direct flow from A to C to E
+```
+
+Reverse connections can be made using `<-`:
+
+```
+  task C <- task A  // Creates flow from A to C
 ```
 
 ### Gateways
@@ -85,48 +106,29 @@ Explicit connections can be made using `->`:
 next task  // Implicit join - first non-branch task
 ```
 
-For multi-branch decisions:
+For custom branch labels:
 
 ```
 ?Payment Method
-  +Credit Card
-  +PayPal
-  +Bank Transfer
-  -Fallback / else path
-next task  // Implicit join - first non-branch task
-```
-
-#### AND Gateways (Parallel)
-
-```
-{Parallel Process
-  =path 1
-  =path 2
-}Join Gate
+  +|Credit Card| process credit card
+  +|Bank Transfer| process bank transfer
+  -|Cancel| cancel order
 next task
-```
-
-#### OR Gateways (Inclusive)
-
-```
-{Optional Steps
-  ~option 1
-  ~option 2
-}Choices Complete
-next task
-```
-
-### Events
-
-```
-!start: Begin process
-!message: Receive confirmation
-!timer: Wait 24 hours [duration: 2d]
-!error: Handle timeout
-!end: Terminate process
 ```
 
 ### Message Flows
+
+Connect send and receive tasks with the same message name:
+
+```
+@Customer
+  send: Payment Information
+  
+@System
+  receive: Payment Information
+```
+
+Or explicitly define message flows:
 
 ```
 ^MessageName @SourceLane.source task -> @TargetLane.target task
@@ -135,14 +137,7 @@ next task
 ### Data Objects
 
 ```
-#InputData @ task name
-#OutputData @ another task
-```
-
-### Data Stores
-
-```
-$Database database task
+#OrderData place order
 ```
 
 ### Comments
@@ -168,13 +163,59 @@ $Database database task
   process order
   validate payment
   ?Payment successful
-    +yes
-    -no
+    +post payment
+    -stop order processing
   ship order
   send: Order Confirmation
 
 ^Order @Customer.place order -> @System.process order
 #OrderData place order
+```
+
+## Complex Example
+
+```
+:Online Shopping Process
+@Customer
+  browse catalog
+  add items to cart
+  checkout
+  send: Shipping Address
+  send: Payment Information
+  "Waiting for confirmation
+  receive: Order Tracking Details
+  track shipment
+  receive: Delivery Notification
+  confirm receipt
+@OrderSystem
+  display products
+  manage cart
+  process checkout
+  receive: Shipping Address
+  receive: Payment Information
+  validate payment
+  ?Payment successful
+    +process order
+    -send: Payment Failed
+  reserve inventory
+  generate invoice
+  send: Order Tracking Details
+@Warehouse
+  receive: Order Request
+  check inventory
+  pick items
+  pack order
+  ?Express shipping
+    +priority handling
+    -standard handling
+  ship package
+  send: Tracking Information
+  send: Delivery Notification
+@Finance
+  receive: Order Details
+  record transaction
+  process refunds
+  generate reports
 ```
 
 ## License

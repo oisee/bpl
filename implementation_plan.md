@@ -1,58 +1,76 @@
-# Implementation Plan for BPMN-lite DSL Editor
+# Implementation Plan for BPMN-lite DSL Parser and Editor
 
 ## Objective
-Develop a BPMN-lite DSL editor with real-time preview capabilities for multiple formats, focusing initially on Mermaid.
+Create a robust parser for BPMN-lite DSL that generates an Abstract Syntax Tree (AST) and renders to Mermaid flowcharts.
 
-## Key Features
-- Text editor for BPMN-lite DSL.
-- Real-time rendering to Mermaid.
-- Modular architecture to support additional backends.
-- Error handling and syntax validation.
+## Completed Features
+- **Whitespace-insensitive parsing**: Lines are trimmed and processed regardless of indentation.
+- **Line type detection**: First non-whitespace character determines the line type.
+- **Support for connections**: Handles -> and <- operators for explicit connections.
+- **Name resolution**: Resolves references from local to wider scope.
+- **Normalized node IDs**: Consistent ID generation for all elements.
+- **Cross-lane connectivity**: Automatically connects tasks across lanes.
+- **Gateway branches**: Processes XOR gateways with positive/negative branches.
+- **Custom branch labels**: Supports custom labels for gateway branches.
+- **Message flows**: Connects send/receive tasks, including message passing.
+- **Data objects**: Handles data objects and their associations.
+- **Comments**: Processes both visible and hidden comments.
 
-## Step 1: Implement the Core Components for Mermaid
-- **Parser**: Develop a `BpmnLiteParser` class to convert the DSL text into an AST. This will be the key function for online text-to-AST translation.
-- **AST Structure**: Define the AST structure using TypeScript interfaces for processes, lanes, tasks, etc.
-- **MermaidTranspiler**: Implement a transpiler to convert the AST into Mermaid syntax for rendering.
+## Core Implementation
+- **BpmnLiteParser Class**: Implemented in JavaScript, with methods for:
+  - `parse()`: Main method to convert DSL text to AST
+  - `connectSequentialTasks()`: Handles automatic task sequence connections
+  - `connectAcrossLanes()`: Connects tasks across different lanes
+  - `toMermaid()`: Converts the AST to Mermaid flowchart syntax
 
-## Step 2: Develop the User Interface
-- **Editor Integration**: Use Monaco Editor for the DSL input with syntax highlighting.
-- **Preview Pane**: Create a preview pane to display the Mermaid diagram.
-- **AST Preview**: Add a simple switch in the UI to toggle between the Mermaid diagram and the AST JSON view.
-
-## Step 3: Implement Stubs for Other Transpilers
-- **DotTranspiler**: Create a stub that returns a placeholder message.
-- **BpmnIoTranspiler**: Create a stub that returns a placeholder message.
-
-## Key Function for Online Text-to-AST Translation
-- **Function/Method**: `parse(input: string): BpmnDocument`
-  - **Class**: `BpmnLiteParser`
-  - **Purpose**: Tokenizes and parses the DSL input to generate an AST.
-  - **Usage**: This function will be called whenever the text in the editor changes to update the AST and subsequently the Mermaid diagram.
-
-## Example Code Snippet for `BpmnLiteParser`
-```typescript
-class BpmnLiteParser {
-  parse(input: string): BpmnDocument {
-    const lines = input.split('\n');
-    const document: BpmnDocument = { processes: [], comments: [] };
-    
-    // Basic parsing logic
-    // ...
-
-    return document;
-  }
-  
-  // Helper parsing methods
-  private parseProcess(lines: string[]): Process { /* ... */ }
-  private parseLane(lines: string[]): Lane { /* ... */ }
-  // ...
+## AST Structure
+The AST is structured as follows:
+```javascript
+{
+  type: 'bpmnModel',
+  processes: [
+    {
+      type: 'process',
+      name: 'Process Name',
+      id: 'process_name',
+      lanes: [
+        {
+          type: 'lane',
+          name: 'Lane Name',
+          id: 'lane_name',
+          elements: [/* Tasks, Gateways, etc. */]
+        }
+      ]
+    }
+  ],
+  connections: [/* Flow, Message, and Data connections */],
+  dataObjects: [/* Data objects */]
 }
 ```
 
-## AST Preview Implementation
-- **UI Component**: Add a toggle button in the UI to switch between the Mermaid diagram and the AST JSON view.
-- **Functionality**: When toggled, display the JSON representation of the AST in a separate pane or overlay.
+## Parser Methods
+- **processLinePart**: Determines line type and routes to appropriate parser
+- **parseProcess**: Handles process definitions (`:Process`)
+- **parseLane**: Handles lane definitions (`@Lane`)
+- **parseTask**: Handles regular tasks and specialized tasks
+- **parseGateway**: Handles gateway definitions (`?Gateway`)
+- **parseGatewayBranch**: Handles positive/negative branches (`+branch`, `-branch`)
+- **parseComment**: Handles comment lines (`"Comment`)
+- **parseConnection**: Handles message flow connections (`^Message`)
+- **parseDataObject**: Handles data object definitions (`#Data`)
+
+## Mermaid Output Implementation
+- **Node styling**: Uses CSS classes for different node types
+- **Subgraphs**: Creates lane subgraphs with appropriate styling
+- **Connection types**: Differentiates between sequence flows, message flows, and data associations
+- **Gateway labeling**: Adds labels to gateway connections based on branch type
+
+## Current Status
+All features have been implemented and tested, with a working demo available through the web interface.
 
 ## Future Enhancements
-- **Additional Backends**: Plan for adding more rendering backends like PlantUML or JSON.
-- **Advanced Features**: Consider features like drag-and-drop editing, export options, and collaborative editing.
+- **Additional Gateway Types**: Implement parallel (AND) and inclusive (OR) gateways
+- **Events**: Add support for start, end, intermediate, and boundary events
+- **Export Options**: Add ability to export to other formats (BPMN XML, SVG)
+- **Validation**: Implement syntax validation and error reporting
+- **Layout Optimization**: Improve automatic layout of complex diagrams
