@@ -558,45 +558,52 @@
       parseConnection(line) {
         // Format: ^Name source -> target
         if (line.startsWith('^')) {
-          const content = line.substring(1).trim();
-          const name = content.split(' ')[0]; // First word is the message name
-          
-          // Find arrow in the remaining content
-          const arrowIndex = content.indexOf('->');
-          const reverseArrowIndex = content.indexOf('<-');
-          
-          let arrow, arrowPos;
-          if (arrowIndex !== -1) {
-            arrow = '->';
-            arrowPos = arrowIndex;
-          } else if (reverseArrowIndex !== -1) {
-            arrow = '<-';
-            arrowPos = reverseArrowIndex;
-          } else {
-            // No arrow found
-            return null;
-          }
-          
-          // Extract source and target, skipping the message name
-          let sourceStart = name.length + 1; // +1 for the space after name
-          const source = content.substring(sourceStart, arrowPos).trim();
-          const target = content.substring(arrowPos + arrow.length).trim();
-          const connectionType = arrow === '<-' ? 'backward' : 'forward';
-          
-          const sourceId = this.resolveTaskId(source);
-          const targetId = this.resolveTaskId(target);
-          
-          if (sourceId && targetId) {
-            if (connectionType === 'forward') {
-              this.addConnection('message', sourceId, targetId, name);
+          try {
+            const content = line.substring(1).trim();
+            const name = content.split(' ')[0]; // First word is the message name
+            
+            // Find arrow in the remaining content
+            const arrowIndex = content.indexOf('->');
+            const reverseArrowIndex = content.indexOf('<-');
+            
+            let arrow, arrowPos;
+            if (arrowIndex !== -1) {
+              arrow = '->';
+              arrowPos = arrowIndex;
+            } else if (reverseArrowIndex !== -1) {
+              arrow = '<-';
+              arrowPos = reverseArrowIndex;
             } else {
-              this.addConnection('message', targetId, sourceId, name);
+              // No arrow found
+              console.log(`No arrow found in message flow: ${line}`);
+              return null;
             }
             
-            console.log(`Created message flow "${name}" from ${sourceId} to ${targetId}`);
-            return targetId; // Return the "end" of the connection
-          } else {
-            console.log(`Failed to resolve task IDs for message flow "${name}": source="${source}", target="${target}"`);
+            // Extract source and target, skipping the message name
+            let sourceStart = name.length + 1; // +1 for the space after name
+            const source = content.substring(sourceStart, arrowPos).trim();
+            const target = content.substring(arrowPos + arrow.length).trim();
+            const connectionType = arrow === '<-' ? 'backward' : 'forward';
+            
+            console.log(`Parsing message flow: "${name}" from "${source}" to "${target}"`);
+            
+            const sourceId = this.resolveTaskId(source);
+            const targetId = this.resolveTaskId(target);
+            
+            if (sourceId && targetId) {
+              if (connectionType === 'forward') {
+                this.addConnection('message', sourceId, targetId, name);
+              } else {
+                this.addConnection('message', targetId, sourceId, name);
+              }
+              
+              console.log(`Created message flow "${name}" from ${sourceId} to ${targetId}`);
+              return targetId; // Return the "end" of the connection
+            } else {
+              console.log(`Failed to resolve task IDs for message flow "${name}": source="${source}" (${sourceId}), target="${target}" (${targetId})`);
+            }
+          } catch (error) {
+            console.error(`Error parsing message flow: ${line}`, error);
           }
         }
         
@@ -1128,6 +1135,7 @@
         mermaid += '\n';
         
         // Add normal sequence flows
+        mermaid += '  %% Sequence flows\n';
         this.connections.forEach(conn => {
           if (conn.type === 'sequenceFlow') {
             // Check if this is a gateway-to-branch connection
@@ -1146,6 +1154,7 @@
         });
         
         // Add message flows with dashed lines and labels
+        mermaid += '  %% Message flows\n';
         this.connections.forEach(conn => {
           if (conn.type === 'messageFlow') {
             const label = conn.name ? `|${conn.name}|` : '';
@@ -1154,6 +1163,7 @@
         });
         
         // Add data associations with dashed lines
+        mermaid += '  %% Data flows\n';
         this.connections.forEach(conn => {
           if (conn.type === 'dataAssociation') {
             mermaid += `  ${conn.sourceRef} -.-> ${conn.targetRef}\n`;
@@ -1236,7 +1246,7 @@
     
     // Run tests after page loads
     window.addEventListener('load', () => {
-      console.log("%c BPMN-lite Parser Demo v1.3.0 (2025-04-18 20:00) LOADED", "background: yellow; color: black; font-size: 20px");
+      console.log("%c BPMN-lite Parser Demo v1.3.1 (2025-04-18 20:15) LOADED", "background: yellow; color: black; font-size: 20px");
       const testResults = runGatewayTests();
       console.log("Gateway tests completed, check console for results");
       
@@ -1250,7 +1260,7 @@
         outputDiv.style.padding = '10px';
         outputDiv.style.zIndex = '1000';
         outputDiv.style.border = '2px solid black';
-        outputDiv.innerHTML = `Version: v1.3.0 (2025-04-18 20:00)<br>
+        outputDiv.innerHTML = `Version: v1.3.1 (2025-04-18 20:15)<br>
                               Test Results: ${testResults.filter(t => t.success).length}/${testResults.length} passed`;
         document.body.appendChild(outputDiv);
       }, 2000);
@@ -1259,7 +1269,7 @@
 </head>
 <body>
   <header>
-    <div class="title">BPMN-lite Parser Demo v1.3.0 (2025-04-18 20:00)</div>
+    <div class="title">BPMN-lite Parser Demo v1.3.1 (2025-04-18 20:15)</div>
     <div id="version-marker" style="background-color: yellow; color: black; padding: 5px; font-weight: bold;">NEW VERSION LOADED</div>
   </header>
   
