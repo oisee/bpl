@@ -1,0 +1,223 @@
+{
+  "type": "bpmnModel",
+  "processes": [
+    {
+      "type": "process",
+      "name": "Order Process",
+      "id": "order_process",
+      "lanes": [
+        {
+          "type": "lane",
+          "name": "Customer",
+          "id": "customer",
+          "elements": [
+            {
+              "type": "task",
+              "name": "place order",
+              "id": "customer_place_order",
+              "lane": "Customer"
+            },
+            {
+              "type": "send",
+              "name": "send: Payment Information",
+              "messageName": "Payment Information",
+              "id": "customer_send_payment_information",
+              "lane": "Customer"
+            },
+            {
+              "type": "comment",
+              "name": "Customer waits for confirmation",
+              "id": "customer_comment_customer_waits_for_c",
+              "lane": "Customer"
+            },
+            {
+              "type": "receive",
+              "name": "receive: Order Confirmation",
+              "messageName": "Order Confirmation",
+              "id": "customer_receive_order_confirmation",
+              "lane": "Customer"
+            }
+          ]
+        },
+        {
+          "type": "lane",
+          "name": "System",
+          "id": "system",
+          "elements": [
+            {
+              "type": "receive",
+              "name": "receive: Payment Information",
+              "messageName": "Payment Information",
+              "id": "system_receive_payment_information",
+              "lane": "System"
+            },
+            {
+              "type": "task",
+              "name": "process order",
+              "id": "system_process_order",
+              "lane": "System"
+            },
+            {
+              "type": "task",
+              "name": "validate payment",
+              "id": "system_validate_payment",
+              "lane": "System"
+            },
+            {
+              "type": "gateway",
+              "gatewayType": "exclusive",
+              "name": "Payment successful",
+              "id": "system_payment_successful",
+              "lane": "System",
+              "branches": [
+                "system_post_payment",
+                "system_stop_order_processing"
+              ]
+            },
+            {
+              "type": "branch",
+              "branchType": "positive",
+              "name": "post payment",
+              "label": "Yes",
+              "id": "system_post_payment",
+              "lane": "System",
+              "parentGateway": "system_payment_successful"
+            },
+            {
+              "type": "branch",
+              "branchType": "negative",
+              "name": "stop order processing",
+              "label": "No",
+              "id": "system_stop_order_processing",
+              "lane": "System",
+              "parentGateway": "system_payment_successful"
+            },
+            {
+              "type": "task",
+              "name": "ship order",
+              "id": "system_ship_order",
+              "lane": "System"
+            },
+            {
+              "type": "send",
+              "name": "send: Order Confirmation",
+              "messageName": "Order Confirmation",
+              "id": "system_send_order_confirmation",
+              "lane": "System"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "type": "sequenceFlow",
+      "id": "conn_customer_place_order_customer_send_payment_information",
+      "name": "",
+      "sourceRef": "customer_place_order",
+      "targetRef": "customer_send_payment_information"
+    },
+    {
+      "type": "sequenceFlow",
+      "id": "conn_customer_send_payment_information_customer_comment_customer_waits_for_c",
+      "name": "",
+      "sourceRef": "customer_send_payment_information",
+      "targetRef": "customer_comment_customer_waits_for_c"
+    },
+    {
+      "type": "sequenceFlow",
+      "id": "conn_customer_comment_customer_waits_for_c_customer_receive_order_confirmation",
+      "name": "",
+      "sourceRef": "customer_comment_customer_waits_for_c",
+      "targetRef": "customer_receive_order_confirmation"
+    },
+    {
+      "type": "sequenceFlow",
+      "id": "conn_system_receive_payment_information_system_process_order",
+      "name": "",
+      "sourceRef": "system_receive_payment_information",
+      "targetRef": "system_process_order"
+    },
+    {
+      "type": "sequenceFlow",
+      "id": "conn_system_process_order_system_validate_payment",
+      "name": "",
+      "sourceRef": "system_process_order",
+      "targetRef": "system_validate_payment"
+    },
+    {
+      "type": "sequenceFlow",
+      "id": "conn_system_validate_payment_system_payment_successful",
+      "name": "",
+      "sourceRef": "system_validate_payment",
+      "targetRef": "system_payment_successful"
+    },
+    {
+      "type": "sequenceFlow",
+      "id": "conn_system_payment_successful_system_post_payment",
+      "name": "",
+      "sourceRef": "system_payment_successful",
+      "targetRef": "system_post_payment"
+    },
+    {
+      "type": "sequenceFlow",
+      "id": "conn_system_payment_successful_system_stop_order_processing",
+      "name": "",
+      "sourceRef": "system_payment_successful",
+      "targetRef": "system_stop_order_processing"
+    },
+    {
+      "type": "sequenceFlow",
+      "id": "conn_system_post_payment_system_ship_order",
+      "name": "",
+      "sourceRef": "system_post_payment",
+      "targetRef": "system_ship_order"
+    },
+    {
+      "type": "sequenceFlow",
+      "id": "conn_system_ship_order_system_send_order_confirmation",
+      "name": "",
+      "sourceRef": "system_ship_order",
+      "targetRef": "system_send_order_confirmation"
+    },
+    {
+      "type": "messageFlow",
+      "id": "conn_customer_send_payment_information_system_receive_payment_information",
+      "name": "Payment Information",
+      "sourceRef": "customer_send_payment_information",
+      "targetRef": "system_receive_payment_information"
+    },
+    {
+      "type": "messageFlow",
+      "id": "conn_system_send_order_confirmation_customer_receive_order_confirmation",
+      "name": "Order Confirmation",
+      "sourceRef": "system_send_order_confirmation",
+      "targetRef": "customer_receive_order_confirmation"
+    }
+  ],
+  "dataObjects": [
+    {
+      "type": "dataObject",
+      "name": "OrderData",
+      "id": "data_orderdata",
+      "taskRef": "place order"
+    }
+  ],
+  "messages": [
+    {
+      "type": "message",
+      "name": "Payment Information",
+      "id": "message_payment_information",
+      "sourceRef": "customer_send_payment_information",
+      "targetRef": "system_receive_payment_information"
+    },
+    {
+      "type": "message",
+      "name": "Order Confirmation",
+      "id": "message_order_confirmation",
+      "sourceRef": "system_send_order_confirmation",
+      "targetRef": "customer_receive_order_confirmation"
+    }
+  ]
+}

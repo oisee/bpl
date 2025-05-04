@@ -1,6 +1,6 @@
 # BPMN-lite DSL Parser and Editor
 
-A minimal, intuitive domain-specific language for describing business process diagrams that can be parsed into an Abstract Syntax Tree (AST) and rendered to Mermaid flowcharts.
+A minimal, intuitive domain-specific language for describing business process diagrams that can be parsed into an Abstract Syntax Tree (AST) and rendered to Mermaid flowcharts. Now with support for exporting to Visio-compatible Excel format.
 
 ## Features
 
@@ -16,6 +16,11 @@ A minimal, intuitive domain-specific language for describing business process di
 - Process and lane definitions
 - Comments and annotations
 - AST preview for debugging
+- Save & export functionality:
+  - Export to .bpl files (source code)
+  - Export to .json files (AST)
+  - Export to .mmd files (Mermaid diagram)
+  - Export to .xlsx files (Visio-compatible format)
 
 ## Getting Started
 
@@ -23,6 +28,10 @@ A minimal, intuitive domain-specific language for describing business process di
 
 - Node.js (v14 or later)
 - npm (v6 or later)
+- Python 3.6+ (required only for Visio export functionality)
+  - pandas
+  - openpyxl
+  - numpy
 
 ### Installation
 
@@ -33,19 +42,76 @@ A minimal, intuitive domain-specific language for describing business process di
 npm install
 ```
 
-3. Build the project:
+3. For Visio export functionality, install Python dependencies:
+
+```bash
+cd tools
+pip install -r requirements.txt
+cd ..
+```
+
+4. Build the project:
 
 ```bash
 npm run build
 ```
 
-4. Start the development server:
+5. Start the development server:
 
 ```bash
 npm start
 ```
 
 This will open the editor in your default browser.
+
+### Building from Source
+
+For a complete build process:
+
+1. Ensure Node.js and npm are installed
+2. Install project dependencies:
+   ```bash
+   npm install
+   ```
+
+3. Install Python dependencies for Visio export:
+   ```bash
+   pip install pandas openpyxl numpy
+   ```
+
+4. Run the build script:
+   ```bash
+   npm run build
+   ```
+   
+   This build process:
+   - Creates the `dist` directory
+   - Copies the HTML files from `src` to `dist`
+   - Copies the Python export tools to `dist/tools`
+   - Creates a server-helper.js file for server-side integration
+   - Copies sample files to `dist/samples`
+
+5. The compiled application will be available in the `dist` directory
+6. To test the application, run:
+   ```bash
+   npm start
+   ```
+
+### Docker Build (Optional)
+
+For containerized deployment:
+
+1. Build the Docker image:
+   ```bash
+   docker build -t bpmn-lite-dsl .
+   ```
+
+2. Run the container:
+   ```bash
+   docker run -p 8080:8080 bpmn-lite-dsl
+   ```
+
+3. Access the application at http://localhost:8080
 
 ## BPMN-lite DSL Syntax
 
@@ -223,6 +289,33 @@ Or explicitly define message flows:
 ^OrderRequest @OrderSystem.process order -> @Warehouse.receive: Order Request
 ^PaymentRecord @OrderSystem.validate payment -> @Finance.receive: Order Details
 ^DeliveryInfo @Warehouse.ship package -> @Customer.track shipment
+```
+
+## Exporting to Visio
+
+The BPL editor provides functionality to export business process diagrams to Visio-compatible Excel format. This allows for further refinement and professional visualization in Microsoft Visio.
+
+### Export Process:
+
+1. Create your business process diagram in the BPL editor
+2. Click the "Save .json" button to export the AST
+3. Click the "Save .xlsx" button to generate a Visio-compatible Excel file
+4. Import the Excel file into Visio:
+   - Open Visio and create a new BPMN diagram
+   - Select "Data" > "Link Data to Shapes"
+   - Browse for your exported Excel file
+   - Map columns to Visio shape properties
+   - Complete the import wizard
+
+### Python Tool
+
+The Visio export functionality is powered by a Python script (`tools/ast_to_visio.py`) that converts the AST JSON to Excel format. For server-side integration, you can use the provided NodeJS helper:
+
+```javascript
+const { convertAstToVisio } = require('./server-helper');
+
+// Convert AST to Excel
+const success = convertAstToVisio('input.json', 'output.xlsx');
 ```
 
 ## License
