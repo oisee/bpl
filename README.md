@@ -314,6 +314,8 @@ The generated Excel file follows a standardized business process format with the
 - **Function**: Corresponds to the Lane/Pool from the BPL diagram
 - **Phase, Owner, Cost, etc.**: Additional fields available for manual entry
 
+The Excel file includes a defined named range "Visio_01" covering all data, which Visio will automatically detect during import.
+
 ### Export Process:
 
 1. Create your business process diagram in the BPL editor
@@ -323,7 +325,13 @@ The generated Excel file follows a standardized business process format with the
    - Open Visio and create a new BPMN diagram
    - Select "Data" > "Link Data to Shapes"
    - Browse for your exported Excel file
-   - Map columns to Visio shape properties
+   - Select the "Visio_01" named range when prompted
+   - Map columns to Visio shape properties:
+     - Process Step ID → ID/Shape text
+     - Process Step Description → Description
+     - Function → Category/Swim lane
+     - Shape Type → Type of shape
+     - Connector Label → Connection label
    - Complete the import wizard
 
 ### Python Tool

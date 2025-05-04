@@ -339,10 +339,30 @@ class BplAstToVisioConverter:
         for col, width in col_widths.items():
             ws.column_dimensions[col].width = width
             
+        # Define a named range for Visio import
+        # Get the number of rows with data (header + data rows)
+        num_rows = len(list(ws.rows))
+        # Get the number of columns (13 columns in the defined format)
+        num_cols = 13
+        
+        # Create a named range covering all data cells
+        # Range format is worksheetname!$A$1:$M$last_row
+        from openpyxl.workbook.defined_name import DefinedName
+        
+        # Define the range reference string
+        range_reference = f"'{ws.title}'!$A$1:${chr(64 + num_cols)}${num_rows}"
+        
+        # Create a named range for Visio
+        defined_name = DefinedName('Visio_01', attr_text=range_reference)
+        
+        # Add the named range to the workbook
+        wb.defined_names.add(defined_name)
+        
         # Save the workbook
         wb.save(output_path)
         
         print(f"Excel file generated at: {output_path}")
+        print(f"Created named range 'Visio_01' covering {range_reference}")
         return output_path
 
 def main():

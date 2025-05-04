@@ -58,7 +58,7 @@ The Excel file follows a standardized business process documentation format with
 6. **Function** - Corresponds to the Lane/Pool from the BPL diagram
 7. **Additional fields** - Phase, Owner, Cost, etc. (empty for manual entry)
 
-This format is specifically designed for seamless importing into Visio and other business process modeling tools.
+This format is specifically designed for seamless importing into Visio and other business process modeling tools. The Excel file also includes a defined named range "Visio_01" that covers all data, making it instantly recognizable during the Visio import process.
 
 ## Visio Import
 
@@ -67,5 +67,12 @@ To import the Excel file into Visio:
 1. Open Visio and create a new BPMN diagram
 2. Select "Data" > "Link Data to Shapes"
 3. Select the generated Excel file
-4. Map the columns to Visio shape properties
-5. Complete the import wizard
+4. When prompted for the data source, choose the "Visio_01" named range
+   - This range is automatically detected thanks to the named range feature
+5. Map the columns to Visio shape properties:
+   - Process Step ID → ID/Shape text
+   - Process Step Description → Description
+   - Function → Category/Swim lane
+   - Shape Type → Type of shape
+   - Connector Label → Connection label
+6. Complete the import wizard
