@@ -183,80 +183,162 @@ class BplAstToVisioConverter:
         ws = wb.active
         ws.title = "Process Diagram"
         
-        # Write header
-        header = ["Business Process Diagram"]
-        ws.append(header)
-        ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=6)
-        header_cell = ws.cell(row=1, column=1)
-        header_cell.font = Font(size=14, bold=True)
+        # Use customer-friendly format for business process flows matching the requested format
+        # Column headers
+        headers = [
+            "Process Step ID", 
+            "Process Step Description", 
+            "Next Step ID", 
+            "Connector Label", 
+            "Shape Type", 
+            "Function", 
+            "Phase", 
+            "Owner", 
+            "Cost", 
+            "Start Date", 
+            "End Date", 
+            "Status", 
+            "Alt Description"
+        ]
         
-        # Add info
-        ws.append(["Generated from BPL AST"])
-        ws.merge_cells(start_row=2, start_column=1, end_row=2, end_column=6)
+        # Add the headers to the first row
+        ws.append(headers)
         
-        # Add empty row
-        ws.append([])
-        
-        # Swimlanes section
-        ws.append(["Swimlanes"])
-        swimlanes_header = ["ID", "Name", "Process"]
-        ws.append(swimlanes_header)
-        
-        # Add swimlanes data
-        row = 6
-        for _, lane in swimlanes_df.iterrows():
-            ws.append([lane['id'], lane['name'], lane['process']])
-            row += 1
-        
-        # Add empty row
-        ws.append([])
-        row += 1
-        
-        # Nodes section
-        ws.append(["Shapes"])
-        row += 1
-        nodes_header = ["ID", "Name", "Type", "Lane", "Visio Shape"]
-        ws.append(nodes_header)
-        row += 1
-        
-        # Add nodes data
-        for _, node in nodes_df.iterrows():
-            ws.append([
-                node['id'], 
-                node['name'], 
-                node['type'],
-                node['lane'], 
-                node['visio_type']
-            ])
-            row += 1
-        
-        # Add empty row
-        ws.append([])
-        row += 1
-        
-        # Edges section
-        ws.append(["Connections"])
-        row += 1
-        edges_header = ["ID", "Type", "Name", "Source", "Target", "Visio Type"]
-        ws.append(edges_header)
-        row += 1
-        
-        # Add edges data
+        # Format headers with bold font
+        for cell in ws[1]:
+            cell.font = Font(bold=True)
+            
+        # Build connection lookup for efficient node connection mapping
+        connection_map = {}
         for _, edge in edges_df.iterrows():
+            source_id = edge['source']
+            target_id = edge['target']
+            connection_label = edge['name']
+            
+            if source_id not in connection_map:
+                connection_map[source_id] = []
+                
+            connection_map[source_id].append({
+                'target': target_id,
+                'label': connection_label
+            })
+            
+        # Add process steps (nodes) with their connections
+        for _, node in nodes_df.iterrows():
+            node_id = node['id']
+            
+            # Get all targets for this node
+            targets = []
+            connector_labels = []
+            if node_id in connection_map:
+                for conn in connection_map[node_id]:
+                    target_id = conn['target']
+                    
+                    # Clean up target ID similar to source ID
+                    clean_target = target_id
+                    if '_' in target_id:
+                        target_parts = target_id.split('_', 1)
+                        if len(target_parts) > 1:
+                            clean_target = target_parts[1]
+                    
+                    # Add uppercase version of clean target ID
+                    targets.append(clean_target.upper())
+                    
+                    # Add connection label if available - only use meaningful labels
+                    if conn['label'] and conn['label'].lower() != "by fields":
+                        connector_labels.append(conn['label'])
+                    else:
+                        # Leave label empty for standard flows
+                        connector_labels.append("")
+                        
+            next_step_id = ",".join(targets) if targets else ""
+            
+            # Only use connector label for meaningful labels (e.g., Yes/No decisions, messages)
+            # Otherwise leave it blank for standard flows
+            connector_label = ",".join(filter(None, connector_labels))
+            
+            # Map BPL node type to Visio shape type
+            shape_type = "Process"  # Default shape type
+            
+            # Get the node type from the dataframe
+            node_type = node['type'] if 'type' in node else ""
+            
+            # Map node types to shape types
+            if node_type == 'gateway':
+                shape_type = "Decision"
+            elif node_type == 'event':
+                event_type = node.get('eventType', '')
+                if event_type == 'start':
+                    shape_type = "Start"
+                elif event_type == 'end':
+                    shape_type = "End"
+                else:
+                    shape_type = "Process"  # Default for intermediate events
+            elif node_type == 'comment':
+                shape_type = "Document"
+            elif node_type == 'dataObject':
+                shape_type = "Data"
+            elif node_type == 'branch':
+                # Branches are not separate shapes in Visio - they're represented as connections
+                shape_type = "Custom 1"
+            elif node_type == 'send' or node_type == 'receive':
+                shape_type = "External reference"  # For message handling
+            
+            # Function corresponds to Lane in BPL
+            function = node['lane'] if 'lane' in node else ""
+            
+            # Format the description as "ID : Name" per the requested format 
+            # Remove any lane prefixes from the node_id for cleaner IDs
+            clean_id = node_id
+            if '_' in node_id and function:
+                parts = node_id.split('_', 1)
+                if parts[0].lower() == function.lower():
+                    clean_id = parts[1]
+                    
+            # Create standardized step ID - prefer to use just the task name without lane prefix
+            step_id = clean_id.upper()
+            
+            # Format description as "STEP_ID : Step name" per the requested format
+            description = f"{step_id} : {node['name']}" if 'name' in node else step_id
+            
+            # Create a row with all the columns
             ws.append([
-                edge['id'],
-                edge['type'],
-                edge['name'],
-                edge['source'],
-                edge['target'],
-                edge['visio_type']
+                step_id,                  # Process Step ID
+                description,              # Process Step Description
+                next_step_id,             # Next Step ID
+                connector_label,          # Connector Label
+                shape_type,               # Shape Type
+                function,                 # Function (Lane)
+                "",                       # Phase
+                "",                       # Owner
+                "",                       # Cost
+                "",                       # Start Date
+                "",                       # End Date
+                "",                       # Status
+                ""                        # Alt Description
             ])
-            row += 1
         
-        # Add styling
-        for col in range(1, 7):
-            ws.column_dimensions[chr(64 + col)].width = 20
+        # Adjust column widths for better visibility
+        col_widths = {
+            'A': 15,  # Process Step ID
+            'B': 40,  # Process Step Description
+            'C': 40,  # Next Step ID
+            'D': 20,  # Connector Label
+            'E': 15,  # Shape Type
+            'F': 25,  # Function
+            'G': 15,  # Phase
+            'H': 15,  # Owner
+            'I': 10,  # Cost
+            'J': 15,  # Start Date
+            'K': 15,  # End Date
+            'L': 15,  # Status
+            'M': 25,  # Alt Description
+        }
         
+        # Set column widths
+        for col, width in col_widths.items():
+            ws.column_dimensions[col].width = width
+            
         # Save the workbook
         wb.save(output_path)
         

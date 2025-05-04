@@ -295,12 +295,31 @@ Or explicitly define message flows:
 
 The BPL editor provides functionality to export business process diagrams to Visio-compatible Excel format. This allows for further refinement and professional visualization in Microsoft Visio.
 
+### Excel Output Format
+
+The generated Excel file follows a standardized business process format with the following columns:
+
+- **Process Step ID**: Unique identifier for each step (automatically generated)
+- **Process Step Description**: "Step ID : Step Name" format for clear identification
+- **Next Step ID**: Comma-separated list of all connected target step IDs
+- **Connector Label**: Only contains meaningful labels like "Yes"/"No" for decisions or message names
+- **Shape Type**: Maps to appropriate Visio shapes based on element type:
+  - Tasks → "Process"
+  - Gateways → "Decision"
+  - Start events → "Start"
+  - End events → "End"
+  - Comments → "Document"
+  - Data objects → "Data"
+  - Message tasks → "External reference"
+- **Function**: Corresponds to the Lane/Pool from the BPL diagram
+- **Phase, Owner, Cost, etc.**: Additional fields available for manual entry
+
 ### Export Process:
 
 1. Create your business process diagram in the BPL editor
 2. Click the "Save .json" button to export the AST
 3. Click the "Save .xlsx" button to generate a Visio-compatible Excel file
-4. Import the Excel file into Visio:
+4. Import the Excel file into Visio or other process modeling tools:
    - Open Visio and create a new BPMN diagram
    - Select "Data" > "Link Data to Shapes"
    - Browse for your exported Excel file

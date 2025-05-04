@@ -1,6 +1,6 @@
 # BPL AST to Visio Excel Converter
 
-This tool converts Business Process Language (BPL) AST JSON files to Visio-compatible Excel format.
+This tool converts Business Process Language (BPL) AST JSON files to Visio-compatible Excel format. The output follows industry-standard business process documentation formats with proper shape type mapping and connection labeling.
 
 ## Installation
 
@@ -40,13 +40,25 @@ function convertAstToVisio(inputJsonPath, outputXlsxPath) {
 
 ## Output Format
 
-The Excel file generated contains three main sections:
+The Excel file follows a standardized business process documentation format with the following columns:
 
-1. **Swimlanes** - Represent the process lanes/participants
-2. **Shapes** - The nodes in the process (tasks, events, gateways)
-3. **Connections** - The edges connecting the shapes (sequence flows, message flows)
+1. **Process Step ID** - Unique identifier for each step (automatically generated)
+2. **Process Step Description** - "Step ID : Step Name" format for clear identification
+3. **Next Step ID** - Comma-separated list of all connected target step IDs
+4. **Connector Label** - Labels for each connection (only used for meaningful labels like "Yes"/"No" decisions)
+5. **Shape Type** - Maps BPL node types to corresponding Visio shapes:
+   - `task` → "Process"
+   - `gateway` → "Decision"
+   - `event` (start) → "Start"
+   - `event` (end) → "End"
+   - `comment` → "Document"
+   - `dataObject` → "Data"
+   - `send/receive` → "External reference"
+   - `branch` → "Custom 1"
+6. **Function** - Corresponds to the Lane/Pool from the BPL diagram
+7. **Additional fields** - Phase, Owner, Cost, etc. (empty for manual entry)
 
-Each section includes the necessary attributes for importing into Visio or other business process modeling tools.
+This format is specifically designed for seamless importing into Visio and other business process modeling tools.
 
 ## Visio Import
 
