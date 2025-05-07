@@ -114,13 +114,47 @@ class BplAstToVisioConverter:
             nodes_df = pd.DataFrame(self.nodes)
             nodes_df['visio_type'] = nodes_df['type'].apply(self.map_node_type_to_visio)
             nodes_df['shape_text'] = nodes_df['name']
+            
+            # For branch nodes, add label information for connector labels
+            branch_nodes = nodes_df[nodes_df['type'] == 'branch'].copy()
+            if not branch_nodes.empty and 'label' in branch_nodes.columns:
+                # Track branch labels for later use in connection labels
+                self.branch_labels = {}
+                for _, branch in branch_nodes.iterrows():
+                    if 'parentGateway' in branch and 'id' in branch and 'label' in branch:
+                        parent = branch['parentGateway']
+                        branch_id = branch['id']
+                        label = branch['label']
+                        self.branch_labels[(parent, branch_id)] = label
+            else:
+                self.branch_labels = {}
         else:
             nodes_df = pd.DataFrame(columns=['id', 'name', 'type', 'lane', 'process', 'visio_type', 'shape_text'])
+            self.branch_labels = {}
         
         # Create DataFrame for edges
         if self.edges:
             edges_df = pd.DataFrame(self.edges)
             edges_df['visio_type'] = edges_df['type'].apply(self.map_edge_type_to_visio)
+            
+            # Add branch labels to gateway connections
+            enhanced_edges = []
+            for _, edge in edges_df.iterrows():
+                source = edge['source']
+                target = edge['target']
+                
+                # Check if this is a gateway-to-branch connection
+                if (source, target) in self.branch_labels:
+                    # Use branch label (Yes/No) as the connector label
+                    edge_data = edge.copy()
+                    edge_data['name'] = self.branch_labels[(source, target)]
+                    enhanced_edges.append(edge_data)
+                else:
+                    enhanced_edges.append(edge)
+                    
+            # Replace the edges dataframe with enhanced version
+            edges_df = pd.DataFrame(enhanced_edges)
+            
             # Edges in Visio need source and target shape names
             edges_df['source_shape'] = edges_df['source'].apply(
                 lambda src: self.get_node_name_by_id(src, nodes_df))
@@ -244,18 +278,41 @@ class BplAstToVisioConverter:
                     # Add uppercase version of clean target ID
                     targets.append(clean_target.upper())
                     
-                    # Add connection label if available - only use meaningful labels
-                    if conn['label'] and conn['label'].lower() != "by fields":
-                        connector_labels.append(conn['label'])
-                    else:
-                        # Leave label empty for standard flows
-                        connector_labels.append("")
+                    # Always capture connection labels, prioritizing branch annotations (Yes/No)
+                    label = conn['label'] if conn['label'] else ""
+                    
+                    # If this is a gateway branch connection, check for branch labels
+                    source_id = node_id
+                    target_id = conn['target']
+                    
+                    # First check if this connection has a branch label like Yes/No
+                    if hasattr(self, 'branch_labels') and (source_id, target_id) in self.branch_labels:
+                        label = self.branch_labels[(source_id, target_id)]
+                    
+                    # For gateway-branch connections, use branch label (Yes/No)
+                    elif label.lower() == "by fields" or not label:
+                        # Try to identify gateway connections from the node types
+                        source_node = next((n for n in self.nodes if n['id'] == source_id), None)
+                        target_node = next((n for n in self.nodes if n['id'] == target_id), None)
+                        
+                        if source_node and target_node:
+                            if source_node.get('type') == 'gateway' and target_node.get('type') == 'branch':
+                                # This is a gateway-branch connection, check if target has a label
+                                if 'label' in target_node:
+                                    label = target_node['label']
+                    
+                    # Add the label (empty string if none found)
+                    connector_labels.append(label)
                         
             next_step_id = ",".join(targets) if targets else ""
             
-            # Only use connector label for meaningful labels (e.g., Yes/No decisions, messages)
-            # Otherwise leave it blank for standard flows
-            connector_label = ",".join(filter(None, connector_labels))
+            # Include all meaningful connector labels, filtering out "by Fields" and empty labels
+            filtered_labels = []
+            for label in connector_labels:
+                if label and label.lower() != "by fields":
+                    filtered_labels.append(label)
+                    
+            connector_label = ",".join(filtered_labels)
             
             # Map BPL node type to Visio shape type
             shape_type = "Process"  # Default shape type
