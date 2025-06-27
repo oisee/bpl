@@ -1,0 +1,22 @@
+Purpose
+-------
+
+This project implements a minimal, intuitive domain-specific language (DSL) called
+BPMN-lite for describing business process diagrams. The DSL source can be
+parsed into an Abstract Syntax Tree (AST) and rendered as Mermaid flowcharts.
+
+Key features:
+  * Whitespace-insensitive syntax with simple line-based parsing
+  * Support for tasks, gateways, message flows, data objects, lanes/pools, and annotations
+  * Explicit and implicit connections (->, <-, sequential flows)
+  * AST preview and name normalization
+  * Export into multiple formats:
+    - .bpl (source code)
+    - .json (AST representation)
+    - .mmd (Mermaid diagram)
+    - .xlsx (Visio-compatible Excel)
+  * Available as a web editor and as a portable desktop application
+
+By providing a streamlined workflow from DSL authoring to diagram export and
+integration with Visio, this tool enables both technical and non-technical users
+to author, visualize, and exchange process models efficiently.

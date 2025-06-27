@@ -2,6 +2,13 @@ const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
 
+console.log('Building BPMN-lite Editor for distribution...');
+const isElectronBuild = process.env.ELECTRON_BUILD === 'true';
+
+if (isElectronBuild) {
+  console.log('Building for Electron packaging...');
+}
+
 // Create dist directory if it doesn't exist
 if (!fs.existsSync('dist')) {
   fs.mkdirSync('dist');
@@ -63,6 +70,38 @@ if (fs.existsSync(path.join(__dirname, 'samples', 'order_process.xlsx'))) {
   );
 }
 
+// Copy additional files for Electron build
+if (isElectronBuild) {
+  console.log('Copying Electron-specific files...');
+  
+  // Ensure resources directory exists in the dist folder
+  if (!fs.existsSync(path.join('dist', 'resources'))) {
+    fs.mkdirSync(path.join('dist', 'resources'));
+  }
+  
+  // Copy icons
+  if (fs.existsSync(path.join(__dirname, 'resources', 'icon.svg'))) {
+    fs.copyFileSync(
+      path.join(__dirname, 'resources', 'icon.svg'),
+      path.join(__dirname, 'dist', 'resources', 'icon.svg')
+    );
+  }
+
+  if (fs.existsSync(path.join(__dirname, 'resources', 'icon.ico'))) {
+    fs.copyFileSync(
+      path.join(__dirname, 'resources', 'icon.ico'),
+      path.join(__dirname, 'dist', 'resources', 'icon.ico')
+    );
+  }
+  
+  // Create a dummy icon.ico if it doesn't exist (for Windows builds)
+  if (!fs.existsSync(path.join(__dirname, 'resources', 'icon.ico'))) {
+    console.log('Creating dummy icon.ico for Windows builds');
+    // Create a minimal empty file
+    fs.writeFileSync(path.join(__dirname, 'resources', 'icon.ico'), '');
+  }
+}
+
 // Create a server-side helper script
 const serverHelper = `
 // This script helps with server-side operations for the BPL editor
@@ -77,13 +116,23 @@ function convertAstToVisio(inputJsonPath, outputXlsxPath) {
     try {
       execSync('python3 --version');
     } catch (err) {
-      console.error('Python 3 is not available. Please install Python 3 to use this feature.');
-      return false;
+      try {
+        execSync('python --version');
+      } catch (err2) {
+        console.error('Python is not available. Please install Python 3 to use this feature.');
+        return false;
+      }
     }
     
     // Run the conversion script
     const scriptPath = path.join(__dirname, 'tools', 'ast_to_visio.py');
-    execSync(\`python3 "\${scriptPath}" "\${inputJsonPath}" "\${outputXlsxPath}"\`);
+    
+    // Try python3 first, then python if that fails
+    try {
+      execSync(\`python3 "\${scriptPath}" "\${inputJsonPath}" "\${outputXlsxPath}"\`);
+    } catch (err) {
+      execSync(\`python "\${scriptPath}" "\${inputJsonPath}" "\${outputXlsxPath}"\`);
+    }
     
     console.log(\`Successfully converted \${inputJsonPath} to \${outputXlsxPath}\`);
     return true;
@@ -104,3 +153,11 @@ fs.writeFileSync(
 );
 
 console.log('Build completed successfully.');
+
+// For Electron builds, provide some helpful instructions
+if (isElectronBuild) {
+  console.log('\nTo package the application as an Electron app:');
+  console.log('1. Run: npm run pack   (creates unpacked directory)');
+  console.log('2. Run: npm run dist   (creates installers)');
+  console.log('\nInstaller will be created in the dist/ directory.');
+}

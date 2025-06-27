@@ -64,6 +64,30 @@ npm start
 
 This will open the editor in your default browser.
 
+### Desktop Application
+
+For non-technical users, we provide a packaged desktop application that doesn't require Node.js or Python installation. The desktop version includes all dependencies bundled together.
+
+#### Download and Installation
+
+1. Download the appropriate package for your operating system from the releases page.
+2. Run the application:
+   - Windows: Extract the portable package and run `Launch-BPMN-Lite-Editor.bat`
+   - macOS: Open the `.dmg` file and drag the application to your Applications folder
+   - Linux: Make the AppImage executable (`chmod +x *.AppImage`) and run it
+
+#### Building for Different Platforms
+
+We provide a simple way to create a portable package that works on Windows:
+
+```bash
+./create-portable.sh
+```
+
+This creates a `BPMN-Lite-Editor-Portable` folder that can be copied to any Windows computer and run without installation.
+
+See [PACKAGING.md](PACKAGING.md) for detailed instructions on packaging for all platforms.
+
 ### Building from Source
 
 For a complete build process:

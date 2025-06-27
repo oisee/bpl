@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background -->
+  <rect width="512" height="512" rx="80" fill="#3498DB"/>
+  
+  <!-- Process Flow Diagram Elements -->
+  <rect x="128" y="128" width="256" height="72" rx="36" fill="#FFFFFF"/>
+  <rect x="128" y="220" width="256" height="72" rx="36" fill="#FFFFFF"/>
+  <rect x="128" y="312" width="256" height="72" rx="36" fill="#FFFFFF"/>
+  
+  <!-- Flow Arrows -->
+  <path d="M256 200L256 220" stroke="#FFFFFF" stroke-width="8" stroke-linecap="round"/>
+  <path d="M256 292L256 312" stroke="#FFFFFF" stroke-width="8" stroke-linecap="round"/>
+  
+  <!-- Arrow Heads -->
+  <path d="M246 210L256 220L266 210" stroke="#FFFFFF" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M246 302L256 312L266 302" stroke="#FFFFFF" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+  
+  <!-- DSL Text Representation -->
+  <rect x="384" y="128" width="48" height="256" rx="4" fill="#F39C12"/>
+  <rect x="394" y="148" width="28" height="8" rx="2" fill="#FFFFFF"/>
+  <rect x="394" y="168" width="28" height="8" rx="2" fill="#FFFFFF"/>
+  <rect x="394" y="188" width="28" height="8" rx="2" fill="#FFFFFF"/>
+  <rect x="394" y="228" width="28" height="8" rx="2" fill="#FFFFFF"/>
+  <rect x="394" y="248" width="28" height="8" rx="2" fill="#FFFFFF"/>
+  <rect x="394" y="268" width="28" height="8" rx="2" fill="#FFFFFF"/>
+  <rect x="394" y="308" width="28" height="8" rx="2" fill="#FFFFFF"/>
+  <rect x="394" y="328" width="28" height="8" rx="2" fill="#FFFFFF"/>
+  <rect x="394" y="348" width="28" height="8" rx="2" fill="#FFFFFF"/>
+</svg>

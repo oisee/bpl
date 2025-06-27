@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; connect-src 'self';">
   <title>BPMN-lite Parser Demo</title>
   <!-- Import Mermaid library -->
   <script src="https://cdn.jsdelivr.net/npm/mermaid@10.6.1/dist/mermaid.min.js"></script>
@@ -1787,6 +1788,52 @@
         alert('Error: Unable to generate AST for Excel export. Please check your BPL syntax.');
       }
     });
+  </script>
+
+  <!-- Electron integration script -->
+  <script>
+    // Check if we're running in Electron
+    const isElectron = typeof window.api !== 'undefined';
+    
+    if (isElectron) {
+      console.log('Running in Electron environment');
+      
+      // Handle file open events from the main process
+      window.api.handleFileOpen((content) => {
+        codeEditor.value = content;
+        updatePreview();
+      });
+      
+      // Handle new file events
+      window.api.handleNewFile(() => {
+        codeEditor.value = '';
+        updatePreview();
+      });
+      
+      // Handle requests for the AST for Excel export
+      window.api.handleAstRequest((outputPath) => {
+        // Make sure we have a current AST
+        if (!currentAst) {
+          parseDSL();
+        }
+        
+        if (currentAst) {
+          window.api.exportToExcel(currentAst, outputPath);
+        }
+      });
+      
+      // Modify save behavior in Electron environment
+      document.getElementById('save-xlsx').addEventListener('click', (originalEvent) => {
+        if (isElectron) {
+          // Prevent default web behavior when in Electron
+          originalEvent.stopPropagation();
+          originalEvent.preventDefault();
+          
+          // Let Electron handle the Excel export through the menu
+          // The main process will trigger the handleAstRequest event
+        }
+      });
+    }
   </script>
 </body>
 </html>
