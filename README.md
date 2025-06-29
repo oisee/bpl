@@ -1,243 +1,124 @@
-# BPMN-lite DSL Parser and Editor
+# BPMN-Lite Editor
 
-A minimal, intuitive domain-specific language for describing business process diagrams that can be parsed into an Abstract Syntax Tree (AST) and rendered to Mermaid flowcharts. Now with support for exporting to Visio-compatible Excel format.
+A minimal, intuitive domain-specific language (DSL) for describing business process diagrams with visual rendering and export capabilities.
+
+## Overview
+
+BPMN-Lite Editor is a lightweight tool that allows you to create business process diagrams using a simple text-based syntax. The editor parses your DSL code into an Abstract Syntax Tree (AST) and renders it as a Mermaid flowchart. It supports both web-based and desktop (Electron) deployment.
+
+## Current Development Status
+
+- **Parser Implementation**: Custom JavaScript parser (not tree-sitter)
+- **Rendering**: Mermaid.js for diagram visualization
+- **Platform**: Electron desktop app + web-based editor
+- **Export Formats**: BPL (source), JSON (AST), Mermaid, Excel (Visio-compatible)
+- **Build Status**: ✅ Working
 
 ## Features
 
-- Whitespace-insensitive parsing
-- Line type detection by first non-whitespace character
-- Support for connections with -> and <- operators
-- Name resolution from local to wider scope
-- Normalized node IDs
-- Sequential connectivity within and across lanes
-- Gateway branches with custom labels
-- Message flows between send/receive tasks
-- Data objects and associations
-- Process and lane definitions
-- Comments and annotations
-- AST preview for debugging
-- Save & export functionality:
-  - Export to .bpl files (source code)
-  - Export to .json files (AST)
-  - Export to .mmd files (Mermaid diagram)
-  - Export to .xlsx files (Visio-compatible format)
+- **Simple DSL Syntax**: Write business processes in plain text
+- **Live Preview**: See your diagram update as you type
+- **Multiple Views**: Switch between Diagram, AST, and Mermaid code views
+- **Gateway Support**: XOR gateways with custom branch labels
+- **Message Flows**: Automatic connection between send/receive tasks
+- **Data Objects**: Attach data to process steps
+- **Cross-Lane Flows**: Automatic sequential connectivity
+- **Export Options**:
+  - `.bpl` - Source code format
+  - `.json` - Abstract Syntax Tree
+  - `.mmd` - Mermaid diagram code
+  - `.xlsx` - Excel format for Visio import
 
-## Getting Started
+## Installation
 
 ### Prerequisites
 
-- Node.js (v14 or later)
-- npm (v6 or later)
-- Python 3.6+ (required only for Visio export functionality)
-  - pandas
-  - openpyxl
-  - numpy
+- Node.js v14+ and npm v6+
+- Python 3.6+ (only for Excel export)
 
-### Installation
-
-1. Clone the repository
-2. Install dependencies:
+### Quick Start
 
 ```bash
+# Clone the repository
+git clone <repository-url>
+cd bpl
+
+# Install dependencies
 npm install
+
+# Build the project
+npm run build
+
+# Start the Electron app
+npm start
+
+# Or start web server
+npm run start:web
 ```
 
-3. For Visio export functionality, install Python dependencies:
+### Python Dependencies (for Excel export)
 
 ```bash
 cd tools
 pip install -r requirements.txt
-cd ..
 ```
 
-4. Build the project:
+## DSL Syntax
 
-```bash
-npm run build
-```
-
-5. Start the development server:
-
-```bash
-npm start
-```
-
-This will open the editor in your default browser.
-
-### Desktop Application
-
-For non-technical users, we provide a packaged desktop application that doesn't require Node.js or Python installation. The desktop version includes all dependencies bundled together.
-
-#### Download and Installation
-
-1. Download the appropriate package for your operating system from the releases page.
-2. Run the application:
-   - Windows: Extract the portable package and run `Launch-BPMN-Lite-Editor.bat`
-   - macOS: Open the `.dmg` file and drag the application to your Applications folder
-   - Linux: Make the AppImage executable (`chmod +x *.AppImage`) and run it
-
-#### Building for Different Platforms
-
-We provide a simple way to create a portable package that works on Windows:
-
-```bash
-./create-portable.sh
-```
-
-This creates a `BPMN-Lite-Editor-Portable` folder that can be copied to any Windows computer and run without installation.
-
-See [PACKAGING.md](PACKAGING.md) for detailed instructions on packaging for all platforms.
-
-### Building from Source
-
-For a complete build process:
-
-1. Ensure Node.js and npm are installed
-2. Install project dependencies:
-   ```bash
-   npm install
-   ```
-
-3. Install Python dependencies for Visio export:
-   ```bash
-   pip install pandas openpyxl numpy
-   ```
-
-4. Run the build script:
-   ```bash
-   npm run build
-   ```
-   
-   This build process:
-   - Creates the `dist` directory
-   - Copies the HTML files from `src` to `dist`
-   - Copies the Python export tools to `dist/tools`
-   - Creates a server-helper.js file for server-side integration
-   - Copies sample files to `dist/samples`
-
-5. The compiled application will be available in the `dist` directory
-6. To test the application, run:
-   ```bash
-   npm start
-   ```
-
-### Docker Build (Optional)
-
-For containerized deployment:
-
-1. Build the Docker image:
-   ```bash
-   docker build -t bpmn-lite-dsl .
-   ```
-
-2. Run the container:
-   ```bash
-   docker run -p 8080:8080 bpmn-lite-dsl
-   ```
-
-3. Access the application at http://localhost:8080
-
-## BPMN-lite DSL Syntax
-
-### Process Definition
+### Basic Structure
 
 ```
 :Process Name
-```
 
-### Lanes/Pools
-
-```
-@Lane Name
+@Lane1
   task 1
   task 2
+
+@Lane2
+  task 3
+  task 4
 ```
 
-### Tasks
-
-Simple text lines after lane definition:
+### Task Types
 
 ```
-@Lane Name
-  task 1
-  task 2
-```
+# Regular task
+do something
 
-Tasks are automatically connected in sequence within the same lane and across lanes.
+# Send message
+send: Message Name
 
-Specialized tasks for sending and receiving messages:
+# Receive message
+receive: Message Name
 
-```
-  send: Payment Information
-  receive: Order Confirmation
-```
-
-Explicit connections can be made using `->`:
-
-```
-  task A -> task C  // Creates direct flow from A to C
-  task A -> task C -> task E  // Creates direct flow from A to C to E
-```
-
-Reverse connections can be made using `<-`:
-
-```
-  task C <- task A  // Creates flow from A to C
-```
-
-### Gateways
-
-#### XOR Gateways (Exclusive Decision)
-
-```
+# Gateway
 ?Decision Point
-  +yes path
-  -no path
-next task  // Implicit join - first non-branch task
+  +positive branch
+  -negative branch
+
+# Data object
+#DataName task reference
+
+# Comment
+"This appears in the diagram
 ```
 
-For custom branch labels:
+### Connections
 
 ```
-?Payment Method
-  +|Credit Card| process credit card
-  +|Bank Transfer| process bank transfer
-  -|Cancel| cancel order
-next task
+# Sequential (automatic within lanes)
+task 1
+task 2
+
+# Explicit connections
+task A -> task C
+task B <- task D
+
+# Message flows
+^MessageName @Lane1.task -> @Lane2.task
 ```
 
-### Message Flows
-
-Connect send and receive tasks with the same message name:
-
-```
-@Customer
-  send: Payment Information
-  
-@System
-  receive: Payment Information
-```
-
-Or explicitly define message flows:
-
-```
-^MessageName @SourceLane.source task -> @TargetLane.target task
-```
-
-### Data Objects
-
-```
-#OrderData place order
-```
-
-### Comments
-
-```
-"This is a note that will appear in the diagram
-// This comment won't appear in the diagram
-```
-
-## Example
+### Example
 
 ```
 :Order Process
@@ -245,132 +126,68 @@ Or explicitly define message flows:
 @Customer
   place order
   send: Payment Information
-  "Customer waits for confirmation
   receive: Order Confirmation
 
 @System
   receive: Payment Information
-  process order
   validate payment
-  ?Payment successful
-    +post payment
-    -stop order processing
-  ship order
+  ?Payment OK
+    +ship order
+    -cancel order
   send: Order Confirmation
 
-^Order @Customer.place order -> @System.process order
 #OrderData place order
 ```
 
-## Complex Example
+## Building from Source
 
-```
-:Online Shopping Process
-@Customer
-  browse catalog
-  add items to cart
-  checkout
-  send: Shipping Address
-  send: Payment Information
-  "Waiting for confirmation
-  receive: Order Tracking Details
-  track shipment
-  receive: Delivery Notification
-  confirm receipt
-@OrderSystem
-  display products
-  manage cart
-  process checkout
-  receive: Shipping Address
-  receive: Payment Information
-  validate payment
-  ?Payment successful
-    +process order
-    -send: Payment Failed
-  reserve inventory
-  generate invoice
-  send: Order Tracking Details
-@Warehouse
-  receive: Order Request
-  check inventory
-  pick items
-  pack order
-  ?Express shipping
-    +priority handling
-    -standard handling
-  ship package
-  send: Tracking Information
-  send: Delivery Notification
-@Finance
-  receive: Order Details
-  record transaction
-  process refunds
-  generate reports
+```bash
+# Install dependencies
+npm install
 
-// Explicit message flows with labels
-^CustomerCart @Customer.add items to cart -> @OrderSystem.manage cart
-^ShippingInfo @Customer.checkout -> @OrderSystem.process checkout
-^OrderRequest @OrderSystem.process order -> @Warehouse.receive: Order Request
-^PaymentRecord @OrderSystem.validate payment -> @Finance.receive: Order Details
-^DeliveryInfo @Warehouse.ship package -> @Customer.track shipment
+# Build distribution files
+npm run build
+
+# Create portable Windows package
+./create-portable.sh
+
+# Build installers for all platforms
+npm run dist:all
 ```
 
-## Exporting to Visio
+## Testing
 
-The BPL editor provides functionality to export business process diagrams to Visio-compatible Excel format. This allows for further refinement and professional visualization in Microsoft Visio.
+Currently, there are no automated tests. The application includes manual test cases in the source code that run on page load.
 
-### Excel Output Format
+## Architecture
 
-The generated Excel file follows a standardized business process format with the following columns:
+- **Parser**: `BpmnLiteParser` class in `src/index.html`
+- **Main Process**: `main.js` - Electron application entry
+- **Build System**: `build.js` - Copies files to dist/
+- **Export Tools**: `tools/ast_to_visio.py` - Excel export
 
-- **Process Step ID**: Unique identifier for each step (automatically generated)
-- **Process Step Description**: "Step ID : Step Name" format for clear identification
-- **Next Step ID**: Comma-separated list of all connected target step IDs
-- **Connector Label**: Only contains meaningful labels like "Yes"/"No" for decisions or message names
-- **Shape Type**: Maps to appropriate Visio shapes based on element type:
-  - Tasks → "Process"
-  - Gateways → "Decision"
-  - Start events → "Start"
-  - End events → "End"
-  - Comments → "Document"
-  - Data objects → "Data"
-  - Message tasks → "External reference"
-- **Function**: Corresponds to the Lane/Pool from the BPL diagram
-- **Phase, Owner, Cost, etc.**: Additional fields available for manual entry
+## Export to Visio
 
-The Excel file includes a defined named range "Visio_01" covering all data, which Visio will automatically detect during import.
+1. Create your diagram in the editor
+2. Click "Save .xlsx" 
+3. Open Excel file in Visio:
+   - Data → Link Data to Shapes
+   - Select the "Visio_01" named range
+   - Map columns to shape properties
 
-### Export Process:
+## Known Issues
 
-1. Create your business process diagram in the BPL editor
-2. Click the "Save .json" button to export the AST
-3. Click the "Save .xlsx" button to generate a Visio-compatible Excel file
-4. Import the Excel file into Visio or other process modeling tools:
-   - Open Visio and create a new BPMN diagram
-   - Select "Data" > "Link Data to Shapes"
-   - Browse for your exported Excel file
-   - Select the "Visio_01" named range when prompted
-   - Map columns to Visio shape properties:
-     - Process Step ID → ID/Shape text
-     - Process Step Description → Description
-     - Function → Category/Swim lane
-     - Shape Type → Type of shape
-     - Connector Label → Connection label
-   - Complete the import wizard
+- No automated test suite
+- Excel export requires Python installation
+- Limited to XOR gateways (no AND/OR gateways)
 
-### Python Tool
+## Contributing
 
-The Visio export functionality is powered by a Python script (`tools/ast_to_visio.py`) that converts the AST JSON to Excel format. For server-side integration, you can use the provided NodeJS helper:
-
-```javascript
-const { convertAstToVisio } = require('./server-helper');
-
-// Convert AST to Excel
-const success = convertAstToVisio('input.json', 'output.xlsx');
-```
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Submit a pull request
 
 ## License
 
-This project is licensed under the MIT License - see the LICENSE file for details.
-
----
+MIT License - see LICENSE file for details
