@@ -118,7 +118,11 @@ task B <- task D
 ^MessageName @Lane1.task -> @Lane2.task
 ```
 
-### Example
+## Examples
+
+### Simple Order Process
+
+This basic example shows how intuitive it is to describe a business process:
 
 ```
 :Order Process
@@ -137,6 +141,365 @@ task B <- task D
   send: Order Confirmation
 
 #OrderData place order
+```
+
+**Renders as:**
+
+```mermaid
+flowchart TD
+  subgraph customer[Customer]
+    customer_place_order[place order]
+    customer_send_payment_information>send: Payment Information]
+    customer_receive_order_confirmation>receive: Order Confirmation]
+  end
+  
+  subgraph system[System]
+    system_receive_payment_information>receive: Payment Information]
+    system_validate_payment[validate payment]
+    system_payment_ok{Payment OK?}
+    system_ship_order[ship order]
+    system_cancel_order[cancel order]
+    system_send_order_confirmation>send: Order Confirmation]
+  end
+  
+  data_orderdata[(OrderData)]
+  
+  customer_place_order --> customer_send_payment_information
+  customer_send_payment_information --> customer_receive_order_confirmation
+  
+  system_receive_payment_information --> system_validate_payment
+  system_validate_payment --> system_payment_ok
+  system_payment_ok -->|Yes| system_ship_order
+  system_payment_ok -->|No| system_cancel_order
+  system_ship_order --> system_send_order_confirmation
+  
+  customer_send_payment_information -.->|Payment Information| system_receive_payment_information
+  system_send_order_confirmation -.->|Order Confirmation| customer_receive_order_confirmation
+  
+  data_orderdata -.-> customer_place_order
+```
+
+### Complex E-Commerce Order Fulfillment
+
+A more complex example showing multiple departments, parallel processes, and decision points:
+
+```
+:E-Commerce Order Fulfillment
+
+@Customer
+  !Start
+  browse products
+  add to cart
+  checkout
+  send: Payment Details
+  send: Shipping Address
+  receive: Order Confirmation
+  receive: Tracking Number
+  receive: Package
+  rate experience
+  !End
+
+@OrderManagement
+  receive: Payment Details
+  receive: Shipping Address
+  validate order
+  ?Fraud Check
+    +|Pass| process payment
+    -|Fail| cancel order
+  ?Payment Success
+    +create fulfillment request
+    -notify payment failure
+  send: Order Confirmation
+
+@Inventory
+  check stock availability
+  ?In Stock
+    +|Available| reserve items
+    +|Partial| split order
+    -|Out of Stock| backorder items
+  update inventory
+  pack items
+
+@Shipping
+  receive fulfillment request
+  ?Shipping Method
+    +|Express| priority handling
+    +|Standard| regular handling
+    -|International| customs processing
+  generate shipping label
+  send: Tracking Number
+  dispatch courier
+
+@CustomerService
+  monitor order status
+  ?Customer Issue
+    +resolve complaint
+    -escalate to manager
+  process returns
+  send feedback survey
+
+#OrderData checkout
+#PaymentData process payment
+#ShippingLabel generate shipping label
+```
+
+### IT Incident Management Process
+
+This example demonstrates how BPMN-Lite handles service desk workflows with multiple teams:
+
+```
+:IT Incident Management
+
+@User
+  !Start
+  report issue
+  send: Incident Details
+  receive: Ticket Number
+  receive: Status Updates
+  ?Resolved
+    +confirm resolution
+    -provide more info
+  !End
+
+@ServiceDesk
+  receive: Incident Details
+  create ticket
+  send: Ticket Number
+  categorize incident
+  ?Priority
+    +|Critical| escalate immediately
+    +|High| assign to specialist
+    +|Medium| queue for team
+    -|Low| self-service guide
+  
+@L1Support
+  receive ticket
+  initial diagnosis
+  ?Can Resolve
+    +apply fix
+    -escalate to L2
+  document solution
+  send: Status Updates
+
+@L2Support
+  deep investigation
+  ?Root Cause Found
+    +implement solution
+    -escalate to vendor
+  test resolution
+  update knowledge base
+
+@Management
+  receive escalations
+  ?Major Incident
+    +convene war room
+    -monitor progress
+  approve changes
+  send communications
+
+^IncidentFlow @User.report issue -> @ServiceDesk.receive: Incident Details
+#TicketData create ticket
+#KnowledgeBase update knowledge base
+```
+
+### Loan Application Process
+
+A financial process example with multiple decision points and compliance checks:
+
+```
+:Loan Application Process
+
+@Applicant
+  !Start
+  submit application
+  send: Financial Documents
+  receive: Information Request
+  provide additional info
+  receive: Decision
+  ?Approved
+    +sign agreement
+    +receive: Funds
+    -seek alternatives
+  !End
+
+@LoanOfficer
+  receive application
+  receive: Financial Documents
+  initial review
+  ?Complete Application
+    +proceed to verification
+    -send: Information Request
+  
+@CreditDepartment
+  run credit check
+  analyze debt ratio
+  ?Credit Score
+    +|Excellent| fast track
+    +|Good| standard process
+    +|Fair| additional review
+    -|Poor| recommend rejection
+  calculate loan terms
+
+@RiskAssessment
+  evaluate application
+  check fraud indicators
+  ?Risk Level
+    +|Low| approve
+    +|Medium| add conditions
+    -|High| reject
+  set interest rate
+
+@Underwriting
+  final review
+  ?Decision
+    +prepare agreement
+    -prepare rejection letter
+  send: Decision
+
+@Disbursement
+  receive signed agreement
+  verify conditions met
+  transfer funds
+  send: Funds
+  setup payment schedule
+
+#ApplicationData submit application
+#CreditReport run credit check
+#LoanAgreement prepare agreement
+```
+
+### Healthcare Patient Journey
+
+This example shows a patient's journey through a healthcare system:
+
+```
+:Patient Emergency Room Visit
+
+@Patient
+  !Start
+  arrive at ER
+  check in
+  provide symptoms
+  receive: Triage Number
+  wait for call
+  receive: Treatment
+  receive: Discharge Instructions
+  !End
+
+@Reception
+  register patient
+  verify insurance
+  create patient record
+  send: Triage Number
+  
+@TriageNurse
+  assess symptoms
+  take vitals
+  ?Severity
+    +|Critical| immediate care
+    +|Urgent| priority queue
+    +|Standard| general queue
+    -|Non-urgent| refer to clinic
+  assign to doctor
+
+@Doctor
+  examine patient
+  order tests
+  review results
+  ?Diagnosis
+    +prescribe treatment
+    -order more tests
+  ?Admission Required
+    +admit to ward
+    -prepare discharge
+
+@Laboratory
+  receive test orders
+  collect samples
+  run tests
+  send results
+  
+@Pharmacy
+  receive prescription
+  verify dosage
+  dispense medication
+  provide instructions
+
+@Billing
+  compile charges
+  submit to insurance
+  ?Coverage
+    +process payment
+    -bill patient
+  close account
+
+^TestOrder @Doctor.order tests -> @Laboratory.receive test orders
+#PatientRecord create patient record
+#TestResults send results
+#InsuranceClaim submit to insurance
+```
+
+### Manufacturing Quality Control
+
+A manufacturing process with quality gates and rework loops:
+
+```
+:Manufacturing Quality Control Process
+
+@Production
+  !Start
+  receive work order
+  pull raw materials
+  setup machinery
+  produce batch
+  send: Batch for QC
+
+@QualityControl
+  receive: Batch for QC
+  inspect samples
+  run tests
+  ?Quality Check
+    +|Pass| approve batch
+    +|Minor Issues| conditional release
+    -|Fail| reject batch
+  document results
+
+@Rework
+  receive rejected batch
+  analyze defects
+  ?Fixable
+    +repair items
+    +send: Batch for QC
+    -scrap batch
+  update process
+
+@Packaging
+  receive approved batch
+  package products
+  label containers
+  ?Final Inspection
+    +release to warehouse
+    -hold for review
+
+@Warehouse
+  receive products
+  update inventory
+  ?Order Pending
+    +ship immediately
+    -store in location
+  !End
+
+@Engineering
+  receive quality reports
+  analyze trends
+  ?Process Issue
+    +modify procedures
+    -continue monitoring
+  update specifications
+
+#WorkOrder receive work order
+#QualityReport document results
+#InventorySystem update inventory
 ```
 
 ## Building from Source
