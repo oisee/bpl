@@ -2,7 +2,7 @@
   "name": "bpmn-lite",
   "displayName": "BPMN-Lite",
   "description": "Live preview for BPMN-Lite DSL with syntax highlighting and real-time diagram rendering",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "publisher": "bpmn-lite",
   "engines": {
     "vscode": "^1.74.0"

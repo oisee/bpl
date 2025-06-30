@@ -2,6 +2,24 @@
 
 All notable changes to the "bpmn-lite" extension will be documented in this file.
 
+## [0.1.2] - 2025-06-30
+
+### Fixed
+- Preview panel now correctly handles VS Code preview mode files (italicized tabs)
+- Improved file detection to check visible editors when no active editor exists
+
+### Added
+- Navigation controls in preview panel:
+  - Pan controls (arrows) for moving the diagram
+  - Zoom controls (+/- buttons) with percentage display
+  - Reset zoom button to return to 100%
+  - Fit to window button for optimal viewing
+- Mouse interactions:
+  - Click and drag to pan the diagram
+  - Ctrl/Cmd + scroll wheel to zoom
+- Smooth transitions for all navigation actions
+- Auto-fit diagram on initial load
+
 ## [0.1.1] - 2024-01-30
 
 ### Fixed

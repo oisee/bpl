@@ -11,6 +11,8 @@ Live preview and syntax highlighting for BPMN-Lite DSL files in Visual Studio Co
 - **⚡ Smart Refresh**: Configurable preview refresh with debouncing
 - **🎯 Focus Tracking**: Preview only updates for the active document
 - **⚠️ Error Highlighting**: Real-time syntax error detection
+- **🔍 Navigation Controls**: Pan, zoom, and fit controls for easy diagram exploration
+- **🖱️ Mouse Interactions**: Click & drag to pan, Ctrl+scroll to zoom
 
 ## Installation
 
