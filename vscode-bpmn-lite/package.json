@@ -1,0 +1,133 @@
+{
+  "name": "bpmn-lite",
+  "displayName": "BPMN-Lite",
+  "description": "Live preview for BPMN-Lite DSL with syntax highlighting and real-time diagram rendering",
+  "version": "0.1.0",
+  "publisher": "bpmn-lite",
+  "engines": {
+    "vscode": "^1.74.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Visualization"
+  ],
+  "keywords": [
+    "bpmn",
+    "diagram",
+    "flowchart",
+    "mermaid",
+    "preview"
+  ],
+  "activationEvents": [
+    "onLanguage:bpmn-lite"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "languages": [
+      {
+        "id": "bpmn-lite",
+        "aliases": [
+          "BPMN-Lite",
+          "bpmn-lite"
+        ],
+        "extensions": [
+          ".bpl",
+          ".bpmn-lite"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "bpmn-lite",
+        "scopeName": "source.bpmn-lite",
+        "path": "./syntaxes/bpmn-lite.tmLanguage.json"
+      }
+    ],
+    "commands": [
+      {
+        "command": "bpmn-lite.showPreview",
+        "title": "BPMN-Lite: Show Preview",
+        "icon": "$(open-preview)"
+      },
+      {
+        "command": "bpmn-lite.showPreviewToSide",
+        "title": "BPMN-Lite: Show Preview to the Side",
+        "icon": "$(open-preview)"
+      },
+      {
+        "command": "bpmn-lite.exportMermaid",
+        "title": "BPMN-Lite: Export as Mermaid"
+      },
+      {
+        "command": "bpmn-lite.exportJSON",
+        "title": "BPMN-Lite: Export as JSON (AST)"
+      }
+    ],
+    "menus": {
+      "editor/title": [
+        {
+          "command": "bpmn-lite.showPreview",
+          "when": "resourceExtname == .bpl",
+          "group": "navigation"
+        }
+      ],
+      "editor/context": [
+        {
+          "command": "bpmn-lite.showPreviewToSide",
+          "when": "resourceExtname == .bpl",
+          "group": "navigation"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "bpmn-lite.showPreview",
+          "when": "resourceExtname == .bpl"
+        },
+        {
+          "command": "bpmn-lite.showPreviewToSide",
+          "when": "resourceExtname == .bpl"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "BPMN-Lite",
+      "properties": {
+        "bpmn-lite.preview.autoRefresh": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically refresh preview when file changes"
+        },
+        "bpmn-lite.preview.refreshDelay": {
+          "type": "number",
+          "default": 300,
+          "description": "Delay in milliseconds before refreshing preview"
+        },
+        "bpmn-lite.preview.theme": {
+          "type": "string",
+          "default": "default",
+          "enum": [
+            "default",
+            "dark",
+            "forest",
+            "neutral"
+          ],
+          "description": "Mermaid diagram theme"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "package": "vsce package"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.74.0",
+    "@types/node": "16.x",
+    "typescript": "^4.9.3",
+    "vsce": "^2.15.0"
+  },
+  "dependencies": {}
+}

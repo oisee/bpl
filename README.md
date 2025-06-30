@@ -1,121 +1,149 @@
 # BPMN-Lite Editor
 
-A minimal, intuitive domain-specific language (DSL) for describing business process diagrams with visual rendering and export capabilities.
+A revolutionary way to create business process diagrams - write in plain text, see beautiful diagrams instantly! 🚀
 
-## Overview
+<p align="center">
+  <img src="https://img.shields.io/badge/Version-0.1.0-blue.svg" alt="Version">
+  <img src="https://img.shields.io/badge/License-MIT-green.svg" alt="License">
+  <img src="https://img.shields.io/badge/PRs-Welcome-brightgreen.svg" alt="PRs Welcome">
+</p>
 
-BPMN-Lite Editor is a lightweight tool that allows you to create business process diagrams using a simple text-based syntax. The editor parses your DSL code into an Abstract Syntax Tree (AST) and renders it as a Mermaid flowchart. It supports both web-based and desktop (Electron) deployment.
+## 🎯 Why BPMN-Lite?
 
-## Current Development Status
+Stop wrestling with complex diagramming tools! BPMN-Lite lets you describe business processes in simple, intuitive text that automatically transforms into professional diagrams.
 
-- **Parser Implementation**: Custom JavaScript parser (not tree-sitter)
-- **Rendering**: Mermaid.js for diagram visualization
-- **Platform**: Electron desktop app + web-based editor
-- **Export Formats**: BPL (source), JSON (AST), Mermaid, Excel (Visio-compatible)
-- **Build Status**: ✅ Working
+```
+@Customer
+  place order
+  send: Payment
+  receive: Confirmation
 
-## Features
+@System  
+  receive: Payment
+  ?Payment Valid
+    +ship order
+    -cancel order
+  send: Confirmation
+```
 
-- **Simple DSL Syntax**: Write business processes in plain text
-- **Live Preview**: See your diagram update as you type
-- **Multiple Views**: Switch between Diagram, AST, and Mermaid code views
-- **Gateway Support**: XOR gateways with custom branch labels
+**↓ Instantly becomes ↓**
+
+A beautiful, interactive BPMN diagram!
+
+## ✨ Key Features
+
+### 📝 **Simple DSL Syntax**
+Write business processes in plain text - no XML, no drag-and-drop, just intuitive notation
+
+### 👁️ **Live Preview** 
+See your diagram update in real-time as you type (with VS Code extension!)
+
+### 🎭 **Multiple Views**
+Switch between:
+- 📊 **Diagram View** - Interactive Mermaid flowchart
+- 🌳 **AST View** - Understand the parsed structure
+- 📜 **Mermaid Code** - Export-ready diagram syntax
+
+### 🔀 **Smart Connectivity**
+- **Gateway Support**: XOR decisions with custom branch labels
 - **Message Flows**: Automatic connection between send/receive tasks
-- **Data Objects**: Attach data to process steps
-- **Cross-Lane Flows**: Automatic sequential connectivity
-- **Export Options**:
-  - `.bpl` - Source code format
-  - `.json` - Abstract Syntax Tree
-  - `.mmd` - Mermaid diagram code
-  - `.xlsx` - Excel format for Visio import
+- **Cross-Lane Flows**: Automatic sequential task connectivity
+- **Data Objects**: Attach data to any process step
 
-## Installation
+### 📤 **Export Options**
+- `.bpl` - Source code format
+- `.json` - Abstract Syntax Tree
+- `.mmd` - Mermaid diagram code  
+- `.xlsx` - Excel format for Visio import
+- `.bpmn` - **Coming Soon!** Native BPMN 2.0 XML (bpmn.io compatible)
 
-### Prerequisites
+## 🚀 Getting Started
 
-- Node.js v14+ and npm v6+
-- Python 3.6+ (only for Excel export)
-
-### Quick Start
+### Option 1: Web-Based Editor (Easiest)
 
 ```bash
-# Clone the repository
+# Clone and setup
 git clone <repository-url>
 cd bpl
-
-# Install dependencies
 npm install
-
-# Build the project
 npm run build
 
-# Start the Electron app
-npm start
-
-# Or start web server
+# Launch in browser
 npm run start:web
 ```
 
-### Python Dependencies (for Excel export)
+Open http://localhost:8080 and start creating!
+
+### Option 2: Desktop Application
+
+```bash
+# Same setup as above, then:
+npm start
+```
+
+### Option 3: VS Code Extension (Recommended!) 
+
+Get the ultimate experience with live preview as you type:
+
+```bash
+cd vscode-bpmn-lite
+npm install
+npm run compile
+
+# In VS Code: Press F5 to test
+# Or package for installation:
+npm run package
+```
+
+### Excel Export Setup (Optional)
 
 ```bash
 cd tools
 pip install -r requirements.txt
 ```
 
-## DSL Syntax
+## 📖 DSL Quick Reference
 
-### Basic Structure
+### Core Elements
 
-```
-:Process Name
+| Syntax | Element | Description |
+|--------|---------|-------------|
+| `:Process Name` | Process | Define the overall process |
+| `@Department` | Lane/Pool | Group related activities |
+| `  task name` | Task | Any indented line is a task |
+| `?Decision` | Gateway | Decision point (XOR) |
+| `+choice` | Positive Branch | Yes/True path |
+| `-choice` | Negative Branch | No/False path |
+| `!Start` / `!End` | Events | Process start/end points |
 
-@Lane1
-  task 1
-  task 2
+### Communication
 
-@Lane2
-  task 3
-  task 4
-```
+| Syntax | Element | Description |
+|--------|---------|-------------|
+| `send: Message` | Send Task | Send a message |
+| `receive: Message` | Receive Task | Wait for a message |
+| `^Flow @A.task -> @B.task` | Message Flow | Explicit connection |
 
-### Task Types
+### Data & Annotations
 
-```
-# Regular task
-do something
+| Syntax | Element | Description |
+|--------|---------|-------------|
+| `#DataObject task` | Data | Attach data to tasks |
+| `"Comment text` | Annotation | Visible comment |
+| `// Hidden comment` | Comment | Not shown in diagram |
 
-# Send message
-send: Message Name
-
-# Receive message
-receive: Message Name
-
-# Gateway
-?Decision Point
-  +positive branch
-  -negative branch
-
-# Data object
-#DataName task reference
-
-# Comment
-"This appears in the diagram
-```
-
-### Connections
+### Advanced Features
 
 ```
-# Sequential (automatic within lanes)
-task 1
-task 2
+# Custom gateway labels
+?Payment Method
+  +|Credit Card| process card payment
+  +|PayPal| process PayPal
+  -|Cancel| cancel transaction
 
-# Explicit connections
-task A -> task C
-task B <- task D
-
-# Message flows
-^MessageName @Lane1.task -> @Lane2.task
+# Direct connections
+task A -> task C  # Skip task B
+task D <- task B  # Reverse arrow
 ```
 
 ## Examples
@@ -1154,55 +1182,119 @@ A manufacturing process with quality gates and rework loops:
 #InventorySystem update inventory
 ```
 
-## Building from Source
+## 🏗️ Architecture & Development
+
+### Project Structure
+```
+bpl/
+├── src/index.html        # Main application (parser + UI)
+├── main.js              # Electron entry point
+├── vscode-bpmn-lite/    # VS Code extension
+│   ├── src/            # Extension source code
+│   └── bpmn-lite-0.1.0.vsix  # Ready-to-install package
+├── tools/              # Export utilities
+└── samples/            # Example .bpl files
+```
+
+### Key Components
+- **Parser**: `BpmnLiteParser` class - Converts DSL to AST
+- **Renderer**: Mermaid.js - Transforms AST to diagrams
+- **Extension**: TypeScript VS Code integration with live preview
+
+### Building from Source
 
 ```bash
-# Install dependencies
+# Main application
 npm install
-
-# Build distribution files
 npm run build
 
-# Create portable Windows package
-./create-portable.sh
+# VS Code extension
+cd vscode-bpmn-lite
+npm install
+npm run compile
+npm run package  # Creates .vsix file
 
-# Build installers for all platforms
+# All platforms
 npm run dist:all
 ```
 
-## Testing
+## 🔄 Export & Integration
 
-Currently, there are no automated tests. The application includes manual test cases in the source code that run on page load.
+### Export to Visio
+1. Click "Save .xlsx" in the editor
+2. Open in Visio: Data → Link Data to Shapes
+3. Map columns automatically
 
-## Architecture
+### Future Integrations
+- **BPMN 2.0 XML**: Native bpmn.io support (in development)
+- **Camunda Integration**: Direct process deployment
+- **API Access**: REST endpoints for automation
 
-- **Parser**: `BpmnLiteParser` class in `src/index.html`
-- **Main Process**: `main.js` - Electron application entry
-- **Build System**: `build.js` - Copies files to dist/
-- **Export Tools**: `tools/ast_to_visio.py` - Excel export
+## 🐛 Known Limitations
 
-## Export to Visio
+- XOR gateways only (AND/OR coming soon)
+- Excel export requires Python
+- BPMN 2.0 export in development
 
-1. Create your diagram in the editor
-2. Click "Save .xlsx" 
-3. Open Excel file in Visio:
-   - Data → Link Data to Shapes
-   - Select the "Visio_01" named range
-   - Map columns to shape properties
+## 🎨 VS Code Extension
 
-## Known Issues
+Experience the **ultimate BPMN-Lite workflow** with our VS Code extension featuring live preview!
 
-- No automated test suite
-- Excel export requires Python installation
-- Limited to XOR gateways (no AND/OR gateways)
+### ✨ Extension Features
 
-## Contributing
+- **🔴 Live Preview**: Diagram updates instantly as you type - no save required!
+- **🎨 Syntax Highlighting**: Full IntelliSense and color coding for all DSL elements
+- **📊 Split View**: Edit code and see diagram side-by-side
+- **⚡ Real-time Validation**: Instant error detection and highlighting
+- **📤 Quick Export**: Export to Mermaid or JSON with one click
+- **🎯 Auto-complete**: Coming soon!
 
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Submit a pull request
+### 📦 Installation
 
-## License
+#### Quick Install (Recommended)
+```bash
+# The extension is already built!
+code --install-extension vscode-bpmn-lite/bpmn-lite-0.1.0.vsix
+```
 
-MIT License - see LICENSE file for details
+#### Development Install
+1. Open VS Code in the `vscode-bpmn-lite` folder
+2. Press `F5` to launch Extension Development Host
+3. Open any `.bpl` file - preview appears automatically!
+
+### 🎮 Usage
+
+1. Create a new file with `.bpl` extension
+2. Start typing - the preview panel opens automatically
+3. Use `Ctrl+Shift+P` → "BPMN-Lite: Show Preview to Side" for split view
+4. Your diagram updates live as you type!
+
+[Full extension documentation](vscode-bpmn-lite/README.md)
+
+## 🤝 Contributing
+
+We welcome contributions! Here's how you can help:
+
+- **🐛 Report Bugs**: Open an issue with reproduction steps
+- **💡 Suggest Features**: Share your ideas in discussions
+- **📝 Improve Docs**: Help us make the documentation better
+- **🔧 Submit PRs**: Fork, branch, code, test, and submit!
+
+### Development Workflow
+```bash
+git checkout -b feature/amazing-feature
+npm test  # Run tests
+git commit -m 'Add amazing feature'
+git push origin feature/amazing-feature
+```
+
+## 📄 License
+
+MIT License - see [LICENSE](LICENSE) file for details
+
+---
+
+<p align="center">
+  Made with ❤️ by the BPMN-Lite team<br>
+  <strong>Transform your business processes today!</strong>
+</p>

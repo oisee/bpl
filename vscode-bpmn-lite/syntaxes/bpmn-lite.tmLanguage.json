@@ -1,0 +1,219 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "BPMN-Lite",
+  "patterns": [
+    {
+      "include": "#comments"
+    },
+    {
+      "include": "#process"
+    },
+    {
+      "include": "#lane"
+    },
+    {
+      "include": "#gateway"
+    },
+    {
+      "include": "#branch"
+    },
+    {
+      "include": "#message"
+    },
+    {
+      "include": "#data"
+    },
+    {
+      "include": "#event"
+    },
+    {
+      "include": "#annotation"
+    },
+    {
+      "include": "#connection"
+    },
+    {
+      "include": "#task"
+    }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.line.double-slash.bpmn-lite",
+          "match": "//.*$"
+        }
+      ]
+    },
+    "process": {
+      "name": "entity.name.class.process.bpmn-lite",
+      "match": "^\\s*(:)(.+)$",
+      "captures": {
+        "1": {
+          "name": "punctuation.definition.process.bpmn-lite"
+        },
+        "2": {
+          "name": "entity.name.class.process.bpmn-lite"
+        }
+      }
+    },
+    "lane": {
+      "name": "entity.name.function.lane.bpmn-lite",
+      "match": "^\\s*(@)([\\w\\s]+)$",
+      "captures": {
+        "1": {
+          "name": "punctuation.definition.lane.bpmn-lite"
+        },
+        "2": {
+          "name": "entity.name.function.lane.bpmn-lite"
+        }
+      }
+    },
+    "gateway": {
+      "name": "keyword.control.gateway.bpmn-lite",
+      "match": "^\\s*(\\?)(.+)$",
+      "captures": {
+        "1": {
+          "name": "punctuation.definition.gateway.bpmn-lite"
+        },
+        "2": {
+          "name": "keyword.control.gateway.bpmn-lite"
+        }
+      }
+    },
+    "branch": {
+      "patterns": [
+        {
+          "name": "string.quoted.branch.positive.bpmn-lite",
+          "match": "^\\s*(\\+)(\\|[^|]+\\|)?(.+)$",
+          "captures": {
+            "1": {
+              "name": "punctuation.definition.branch.positive.bpmn-lite"
+            },
+            "2": {
+              "name": "constant.other.label.bpmn-lite"
+            },
+            "3": {
+              "name": "string.quoted.branch.positive.bpmn-lite"
+            }
+          }
+        },
+        {
+          "name": "string.quoted.branch.negative.bpmn-lite",
+          "match": "^\\s*(-)(\\|[^|]+\\|)?(.+)$",
+          "captures": {
+            "1": {
+              "name": "punctuation.definition.branch.negative.bpmn-lite"
+            },
+            "2": {
+              "name": "constant.other.label.bpmn-lite"
+            },
+            "3": {
+              "name": "string.quoted.branch.negative.bpmn-lite"
+            }
+          }
+        }
+      ]
+    },
+    "message": {
+      "patterns": [
+        {
+          "name": "variable.language.message.send.bpmn-lite",
+          "match": "\\b(send:)\\s*(.+)$",
+          "captures": {
+            "1": {
+              "name": "keyword.operator.send.bpmn-lite"
+            },
+            "2": {
+              "name": "variable.language.message.name.bpmn-lite"
+            }
+          }
+        },
+        {
+          "name": "variable.language.message.receive.bpmn-lite",
+          "match": "\\b(receive:)\\s*(.+)$",
+          "captures": {
+            "1": {
+              "name": "keyword.operator.receive.bpmn-lite"
+            },
+            "2": {
+              "name": "variable.language.message.name.bpmn-lite"
+            }
+          }
+        }
+      ]
+    },
+    "data": {
+      "name": "storage.type.data.bpmn-lite",
+      "match": "^\\s*(#)(\\w+)\\s*(.*)$",
+      "captures": {
+        "1": {
+          "name": "punctuation.definition.data.bpmn-lite"
+        },
+        "2": {
+          "name": "storage.type.data.bpmn-lite"
+        },
+        "3": {
+          "name": "variable.other.reference.bpmn-lite"
+        }
+      }
+    },
+    "event": {
+      "name": "constant.language.event.bpmn-lite",
+      "match": "^\\s*(!)(.+)$",
+      "captures": {
+        "1": {
+          "name": "punctuation.definition.event.bpmn-lite"
+        },
+        "2": {
+          "name": "constant.language.event.bpmn-lite"
+        }
+      }
+    },
+    "annotation": {
+      "name": "comment.block.documentation.bpmn-lite",
+      "match": "^\\s*(\")(.+)$",
+      "captures": {
+        "1": {
+          "name": "punctuation.definition.annotation.bpmn-lite"
+        },
+        "2": {
+          "name": "comment.block.documentation.bpmn-lite"
+        }
+      }
+    },
+    "connection": {
+      "patterns": [
+        {
+          "name": "keyword.operator.arrow.bpmn-lite",
+          "match": "(->|<-)"
+        },
+        {
+          "name": "variable.parameter.message-flow.bpmn-lite",
+          "match": "^\\s*(\\^)(\\w+)\\s+(.+)$",
+          "captures": {
+            "1": {
+              "name": "punctuation.definition.message-flow.bpmn-lite"
+            },
+            "2": {
+              "name": "variable.parameter.message-name.bpmn-lite"
+            },
+            "3": {
+              "name": "variable.parameter.message-path.bpmn-lite"
+            }
+          }
+        }
+      ]
+    },
+    "task": {
+      "name": "entity.name.tag.task.bpmn-lite",
+      "match": "^\\s+(.+)$",
+      "captures": {
+        "1": {
+          "name": "entity.name.tag.task.bpmn-lite"
+        }
+      }
+    }
+  },
+  "scopeName": "source.bpmn-lite"
+}
