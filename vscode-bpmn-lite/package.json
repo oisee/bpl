@@ -2,7 +2,7 @@
   "name": "bpmn-lite",
   "displayName": "BPMN-Lite",
   "description": "Live preview for BPMN-Lite DSL with syntax highlighting and real-time diagram rendering",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "publisher": "bpmn-lite",
   "engines": {
     "vscode": "^1.74.0"
@@ -93,6 +93,11 @@
     "configuration": {
       "title": "BPMN-Lite",
       "properties": {
+        "bpmn-lite.preview.autoOpen": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically open preview when opening .bpl files"
+        },
         "bpmn-lite.preview.autoRefresh": {
           "type": "boolean",
           "default": true,
@@ -102,6 +107,11 @@
           "type": "number",
           "default": 300,
           "description": "Delay in milliseconds before refreshing preview"
+        },
+        "bpmn-lite.preview.openToSide": {
+          "type": "boolean",
+          "default": true,
+          "description": "Always open preview to the side (split screen)"
         },
         "bpmn-lite.preview.theme": {
           "type": "string",

@@ -4,12 +4,13 @@ Live preview and syntax highlighting for BPMN-Lite DSL files in Visual Studio Co
 
 ## Features
 
-- **Live Preview**: See your BPMN diagram update in real-time as you type
-- **Syntax Highlighting**: Full syntax highlighting for BPMN-Lite DSL
-- **Export Options**: Export to Mermaid or JSON (AST) format
-- **Auto-refresh**: Configurable preview refresh with debouncing
-- **Split View**: Open preview side-by-side with your code
-- **Error Highlighting**: Real-time syntax error detection
+- **🔴 Live Preview**: See your BPMN diagram update in real-time as you type
+- **📊 Split-Screen by Default**: Preview opens to the side, never blocking your text editor
+- **🎨 Syntax Highlighting**: Full syntax highlighting for BPMN-Lite DSL
+- **📤 Export Options**: Export to Mermaid or JSON (AST) format
+- **⚡ Smart Refresh**: Configurable preview refresh with debouncing
+- **🎯 Focus Tracking**: Preview only updates for the active document
+- **⚠️ Error Highlighting**: Real-time syntax error detection
 
 ## Installation
 
@@ -42,6 +43,8 @@ Live preview and syntax highlighting for BPMN-Lite DSL files in Visual Studio Co
 
 ## Configuration
 
+- `bpmn-lite.preview.autoOpen` - Automatically open preview for .bpl files (default: true)
+- `bpmn-lite.preview.openToSide` - Always open preview in split-screen (default: true)
 - `bpmn-lite.preview.autoRefresh` - Enable/disable auto-refresh (default: true)
 - `bpmn-lite.preview.refreshDelay` - Delay before refresh in ms (default: 300)
 - `bpmn-lite.preview.theme` - Mermaid diagram theme (default/dark/forest/neutral)

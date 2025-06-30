@@ -1254,7 +1254,7 @@ Experience the **ultimate BPMN-Lite workflow** with our VS Code extension featur
 #### Quick Install (Recommended)
 ```bash
 # The extension is already built!
-code --install-extension vscode-bpmn-lite/bpmn-lite-0.1.0.vsix
+code --install-extension vscode-bpmn-lite/bpmn-lite-0.1.1.vsix
 ```
 
 #### Development Install

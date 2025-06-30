@@ -11,13 +11,13 @@ export class BpmnLitePreviewPanel {
     private _updateTimer: NodeJS.Timeout | undefined;
 
     public static createOrShow(extensionUri: vscode.Uri, column?: vscode.ViewColumn) {
-        const activeColumn = column || (vscode.window.activeTextEditor
-            ? vscode.window.activeTextEditor.viewColumn
-            : undefined);
+        // Always prefer showing beside the editor to not block text editing
+        const targetColumn = column || vscode.ViewColumn.Beside;
 
-        // If we already have a panel, show it
+        // If we already have a panel, show it in the correct column
         if (BpmnLitePreviewPanel.currentPanel) {
-            BpmnLitePreviewPanel.currentPanel._panel.reveal(activeColumn);
+            // Move to the target column if needed
+            BpmnLitePreviewPanel.currentPanel._panel.reveal(targetColumn, true);
             BpmnLitePreviewPanel.currentPanel._update();
             return;
         }
@@ -26,13 +26,19 @@ export class BpmnLitePreviewPanel {
         const panel = vscode.window.createWebviewPanel(
             BpmnLitePreviewPanel.viewType,
             'BPMN-Lite Preview',
-            activeColumn || vscode.ViewColumn.Two,
+            targetColumn,
             {
                 enableScripts: true,
                 retainContextWhenHidden: true,
                 localResourceRoots: [extensionUri]
             }
         );
+
+        // Set icon for the panel
+        panel.iconPath = {
+            light: vscode.Uri.joinPath(extensionUri, 'media', 'preview-light.svg'),
+            dark: vscode.Uri.joinPath(extensionUri, 'media', 'preview-dark.svg')
+        };
 
         BpmnLitePreviewPanel.currentPanel = new BpmnLitePreviewPanel(panel, extensionUri);
     }
@@ -71,9 +77,10 @@ export class BpmnLitePreviewPanel {
             this._disposables
         );
 
-        // Listen to text document changes
+        // Listen to text document changes - only update if it's the active document
         vscode.workspace.onDidChangeTextDocument(e => {
-            if (e.document.languageId === 'bpmn-lite') {
+            const activeEditor = vscode.window.activeTextEditor;
+            if (activeEditor && e.document === activeEditor.document && e.document.languageId === 'bpmn-lite') {
                 this._scheduleUpdate();
             }
         }, null, this._disposables);
@@ -81,6 +88,13 @@ export class BpmnLitePreviewPanel {
         // Listen to active editor changes
         vscode.window.onDidChangeActiveTextEditor(editor => {
             if (editor && editor.document.languageId === 'bpmn-lite') {
+                this._update();
+            }
+        }, null, this._disposables);
+        
+        // Listen to save events for immediate update
+        vscode.workspace.onDidSaveTextDocument(document => {
+            if (document.languageId === 'bpmn-lite') {
                 this._update();
             }
         }, null, this._disposables);

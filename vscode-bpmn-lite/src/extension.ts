@@ -8,7 +8,10 @@ export function activate(context: vscode.ExtensionContext) {
     // Register preview commands
     context.subscriptions.push(
         vscode.commands.registerCommand('bpmn-lite.showPreview', () => {
-            BpmnLitePreviewPanel.createOrShow(context.extensionUri);
+            const config = vscode.workspace.getConfiguration('bpmn-lite');
+            const openToSide = config.get<boolean>('preview.openToSide', true);
+            const column = openToSide ? vscode.ViewColumn.Beside : vscode.ViewColumn.Active;
+            BpmnLitePreviewPanel.createOrShow(context.extensionUri, column);
         })
     );
 
@@ -92,21 +95,26 @@ export function activate(context: vscode.ExtensionContext) {
         })
     );
 
-    // Auto-open preview for .bpl files
+    // Auto-open preview for .bpl files in split view
     if (vscode.window.activeTextEditor) {
         const document = vscode.window.activeTextEditor.document;
         if (document && document.languageId === 'bpmn-lite') {
-            BpmnLitePreviewPanel.createOrShow(context.extensionUri);
+            // Always open to the side to avoid blocking text editing
+            BpmnLitePreviewPanel.createOrShow(context.extensionUri, vscode.ViewColumn.Beside);
         }
     }
 
-    // Handle opening of .bpl files
+    // Handle opening of .bpl files - always use split view
     context.subscriptions.push(
         vscode.window.onDidChangeActiveTextEditor(editor => {
             if (editor && editor.document && editor.document.languageId === 'bpmn-lite') {
                 const config = vscode.workspace.getConfiguration('bpmn-lite');
-                if (config.get('preview.autoRefresh')) {
-                    BpmnLitePreviewPanel.createOrShow(context.extensionUri);
+                if (config.get('preview.autoOpen', true)) {
+                    // Check if preview already exists
+                    if (!BpmnLitePreviewPanel.currentPanel) {
+                        // Always open to the side to avoid blocking
+                        BpmnLitePreviewPanel.createOrShow(context.extensionUri, vscode.ViewColumn.Beside);
+                    }
                 }
             }
         })
