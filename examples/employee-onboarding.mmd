@@ -1,0 +1,151 @@
+flowchart TD
+  %% Define node styles
+  classDef event fill:#ffd,stroke:#33f,stroke-width:2px
+  classDef task fill:#bbf,stroke:#33f,stroke-width:2px
+  classDef message fill:#bfb,stroke:#070,stroke-width:2px
+  classDef gateway fill:#fcc,stroke:#f00,stroke-width:2px
+  classDef comment fill:#ffd,stroke:#bb0,stroke-width:1px
+  classDef dataObject fill:#ececff,stroke:#9370db,stroke-width:1px
+  classDef branch fill:#d5ffd5,stroke:#3cb371,stroke-width:1px
+  data_employeedata[(EmployeeData)]:::dataObject
+  data_documentdata[(DocumentData)]:::dataObject
+  data_itrequestdata[(ITRequestData)]:::dataObject
+  subgraph sg0["HR Department"]
+    hr_department_start([Start]):::event
+    hr_department_receive_job_acceptance[receive job acceptance]:::task
+    hr_department_create_employee_record[create employee record]:::task
+    hr_department_send_welcome_email>send: Welcome Email]:::message
+    hr_department_send_onboarding_schedule>send: Onboarding Schedule]:::message
+    hr_department_prepare_paperwork[prepare paperwork]:::task
+    hr_department_send_document_request>send: Document Request]:::message
+    hr_department_receive_completed_documents>receive: Completed Documents]:::message
+    hr_department_verify_documents[verify documents]:::task
+    hr_department_documents_valid{Documents Valid?}:::gateway
+    hr_department_approve_documents["approve documents"]:::branch
+    hr_department_send_it_request["send: IT Request"]:::branch
+    hr_department_send_facilities_request["send: Facilities Request"]:::branch
+    hr_department_request_corrections["request corrections"]:::branch
+    hr_department_send_document_corrections["send: Document Corrections"]:::branch
+    hr_department_schedule_orientation[schedule orientation]:::task
+    hr_department_send_orientation_invite>send: Orientation Invite]:::message
+    hr_department_conduct_orientation[conduct orientation]:::task
+    hr_department_complete_onboarding[complete onboarding]:::task
+    hr_department_end([End]):::event
+  end
+  subgraph sg1["New Employee"]
+    new_employee_send_job_acceptance[send job acceptance]:::task
+    new_employee_receive_welcome_email>receive: Welcome Email]:::message
+    new_employee_receive_onboarding_schedule>receive: Onboarding Schedule]:::message
+    new_employee_receive_document_request>receive: Document Request]:::message
+    new_employee_complete_paperwork[complete paperwork]:::task
+    new_employee_send_completed_documents>send: Completed Documents]:::message
+    new_employee_receive_document_corrections>receive: Document Corrections]:::message
+    new_employee_receive_account_credentials>receive: Account Credentials]:::message
+    new_employee_receive_workspace_assignment>receive: Workspace Assignment]:::message
+    new_employee_receive_orientation_invite>receive: Orientation Invite]:::message
+    new_employee_attend_orientation[attend orientation]:::task
+    new_employee_complete_training[complete training]:::task
+  end
+  subgraph sg2["IT Department"]
+    it_department_receive_it_request>receive: IT Request]:::message
+    it_department_create_user_account[create user account]:::task
+    it_department_setup_email[setup email]:::task
+    it_department_configure_permissions[configure permissions]:::task
+    it_department_prepare_equipment[prepare equipment]:::task
+    it_department_equipment_ready{Equipment Ready?}:::gateway
+    it_department_install_software["install software"]:::branch
+    it_department_send_account_credentials["send: Account Credentials"]:::branch
+    it_department_order_equipment["order equipment"]:::branch
+    it_department_wait_for_delivery["wait for delivery"]:::branch
+    it_department_setup_workstation[setup workstation]:::task
+  end
+  subgraph sg3["Facilities"]
+    facilities_receive_facilities_request>receive: Facilities Request]:::message
+    facilities_assign_workspace[assign workspace]:::task
+    facilities_prepare_desk[prepare desk]:::task
+    facilities_order_supplies[order supplies]:::task
+    facilities_create_access_badge[create access badge]:::task
+    facilities_send_workspace_assignment>send: Workspace Assignment]:::message
+  end
+  subgraph sg4["Payroll"]
+    payroll_receive_employee_data[receive employee data]:::task
+    payroll_setup_payroll_account[setup payroll account]:::task
+    payroll_configure_benefits[configure benefits]:::task
+    payroll_send_benefits_enrollment>send: Benefits Enrollment]:::message
+    payroll_process_first_payment[process first payment]:::task
+  end
+  style sg0 fill:#f9f9f9,stroke:#333,stroke-width:1px
+  style sg1 fill:#e6f3ff,stroke:#333,stroke-width:1px
+  style sg2 fill:#f9f9f9,stroke:#333,stroke-width:1px
+  style sg3 fill:#e6f3ff,stroke:#333,stroke-width:1px
+  style sg4 fill:#f9f9f9,stroke:#333,stroke-width:1px
+
+  %% Sequence flows
+  hr_department_start --> hr_department_receive_job_acceptance
+  hr_department_receive_job_acceptance --> hr_department_create_employee_record
+  hr_department_create_employee_record --> hr_department_send_welcome_email
+  hr_department_send_welcome_email --> hr_department_send_onboarding_schedule
+  hr_department_send_onboarding_schedule --> hr_department_prepare_paperwork
+  hr_department_prepare_paperwork --> hr_department_send_document_request
+  hr_department_send_document_request --> hr_department_receive_completed_documents
+  hr_department_receive_completed_documents --> hr_department_verify_documents
+  hr_department_verify_documents --> hr_department_documents_valid
+  hr_department_verify_documents --> hr_department_schedule_orientation
+  hr_department_schedule_orientation --> hr_department_send_orientation_invite
+  hr_department_send_orientation_invite --> hr_department_conduct_orientation
+  hr_department_conduct_orientation --> hr_department_complete_onboarding
+  hr_department_complete_onboarding --> hr_department_end
+  new_employee_send_job_acceptance --> new_employee_receive_welcome_email
+  new_employee_receive_welcome_email --> new_employee_receive_onboarding_schedule
+  new_employee_receive_onboarding_schedule --> new_employee_receive_document_request
+  new_employee_receive_document_request --> new_employee_complete_paperwork
+  new_employee_complete_paperwork --> new_employee_send_completed_documents
+  new_employee_send_completed_documents --> new_employee_receive_document_corrections
+  new_employee_receive_document_corrections --> new_employee_receive_account_credentials
+  new_employee_receive_account_credentials --> new_employee_receive_workspace_assignment
+  new_employee_receive_workspace_assignment --> new_employee_receive_orientation_invite
+  new_employee_receive_orientation_invite --> new_employee_attend_orientation
+  new_employee_attend_orientation --> new_employee_complete_training
+  it_department_receive_it_request --> it_department_create_user_account
+  it_department_create_user_account --> it_department_setup_email
+  it_department_setup_email --> it_department_configure_permissions
+  it_department_configure_permissions --> it_department_prepare_equipment
+  it_department_prepare_equipment --> it_department_equipment_ready
+  it_department_prepare_equipment --> it_department_setup_workstation
+  facilities_receive_facilities_request --> facilities_assign_workspace
+  facilities_assign_workspace --> facilities_prepare_desk
+  facilities_prepare_desk --> facilities_order_supplies
+  facilities_order_supplies --> facilities_create_access_badge
+  facilities_create_access_badge --> facilities_send_workspace_assignment
+  payroll_receive_employee_data --> payroll_setup_payroll_account
+  payroll_setup_payroll_account --> payroll_configure_benefits
+  payroll_configure_benefits --> payroll_send_benefits_enrollment
+  payroll_send_benefits_enrollment --> payroll_process_first_payment
+  hr_department_documents_valid -->|Yes| hr_department_approve_documents
+  hr_department_documents_valid -->|Yes| hr_department_send_it_request
+  hr_department_documents_valid -->|Yes| hr_department_send_facilities_request
+  hr_department_documents_valid -->|No| hr_department_request_corrections
+  hr_department_documents_valid -->|No| hr_department_send_document_corrections
+  hr_department_approve_documents --> hr_department_schedule_orientation
+  hr_department_send_it_request --> hr_department_schedule_orientation
+  hr_department_send_facilities_request --> hr_department_schedule_orientation
+  it_department_equipment_ready -->|Yes| it_department_install_software
+  it_department_equipment_ready -->|Yes| it_department_send_account_credentials
+  it_department_equipment_ready -->|No| it_department_order_equipment
+  it_department_equipment_ready -->|No| it_department_wait_for_delivery
+  it_department_install_software --> it_department_setup_workstation
+  it_department_send_account_credentials --> it_department_setup_workstation
+  hr_department_end --> new_employee_send_job_acceptance
+  new_employee_complete_training --> it_department_receive_it_request
+  it_department_setup_workstation --> facilities_receive_facilities_request
+  facilities_send_workspace_assignment --> payroll_receive_employee_data
+  %% Message flows
+  hr_department_send_welcome_email -.->|Welcome Email| new_employee_receive_welcome_email
+  hr_department_send_onboarding_schedule -.->|Onboarding Schedule| new_employee_receive_onboarding_schedule
+  hr_department_send_document_request -.->|Document Request| new_employee_receive_document_request
+  hr_department_send_orientation_invite -.->|Orientation Invite| new_employee_receive_orientation_invite
+  new_employee_send_completed_documents -.->|Completed Documents| hr_department_receive_completed_documents
+  facilities_send_workspace_assignment -.->|Workspace Assignment| new_employee_receive_workspace_assignment
+  %% Data flows
+  data_documentdata -.-> new_employee_send_completed_documents
+  data_itrequestdata -.-> it_department_receive_it_request

@@ -449,6 +449,7 @@
         
         const eventName = line.substring(1).trim(); // Remove the ! prefix
         const laneName = this.currentLane.replace('@', '');
+        const normalizedLaneName = this.normalizeId(laneName);
         let eventType = 'intermediate';
         
         // Determine event type based on common keywords
@@ -458,7 +459,7 @@
           eventType = 'end';
         }
         
-        const eventId = `${laneName}_${eventType}`;
+        const eventId = `${normalizedLaneName}_${eventType}`;
         
         this.tasks[eventId] = {
           type: 'event',
@@ -531,7 +532,8 @@
         }
         
         const laneName = this.currentLane.replace('@', '');
-        const taskId = `${laneName}_${this.normalizeId(originalName)}`;
+        const normalizedLaneName = this.normalizeId(laneName);
+        const taskId = `${normalizedLaneName}_${this.normalizeId(originalName)}`;
         
         this.tasks[taskId] = {
           type: taskType,
@@ -567,7 +569,8 @@
         
         const gatewayName = line.substring(1).trim();
         const laneName = this.currentLane.replace('@', '');
-        const gatewayId = `${laneName}_${this.normalizeId(gatewayName)}`;
+        const normalizedLaneName = this.normalizeId(laneName);
+        const gatewayId = `${normalizedLaneName}_${this.normalizeId(gatewayName)}`;
         
         this.tasks[gatewayId] = {
           type: 'gateway',
@@ -601,7 +604,8 @@
         const parentGateway = this.gatewayStack[this.gatewayStack.length - 1];
         const branchName = line.substring(1).trim();
         const laneName = this.currentLane.replace('@', '');
-        const branchId = `${laneName}_${this.normalizeId(branchName)}`;
+        const normalizedLaneName = this.normalizeId(laneName);
+        const branchId = `${normalizedLaneName}_${this.normalizeId(branchName)}`;
         
         // Check if this is a special format branch with custom label
         let displayName = branchName;
@@ -649,7 +653,8 @@
         
         const commentText = line.substring(1).trim();
         const laneName = this.currentLane.replace('@', '');
-        const commentId = `${laneName}_comment_${this.normalizeId(commentText.substring(0, 20))}`;
+        const normalizedLaneName = this.normalizeId(laneName);
+        const commentId = `${normalizedLaneName}_comment_${this.normalizeId(commentText.substring(0, 20))}`;
         
         this.tasks[commentId] = {
           type: 'comment',
@@ -1368,6 +1373,7 @@
 
         // Group by lanes/pools
         const laneNodes = {};
+        const laneDisplayNames = {};
         
         // Collect nodes for each lane (including branches)
         Object.entries(this.lanes).forEach(([laneName, lane]) => {
@@ -1376,6 +1382,8 @@
             const task = this.tasks[taskId];
             return task; // Include all task types in subgraphs
           });
+          // Store original lane name for display
+          laneDisplayNames[normalizedLaneName] = laneName.replace('@', '');
         });
         
         // Add subgraphs for each lane
@@ -1383,7 +1391,8 @@
           if (taskIds.length > 0) {
             // Use sg prefix to ensure valid subgraph names
             const sgName = `sg${index}`;
-            const displayName = laneName.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+            // Use the original lane name for display
+            const displayName = laneDisplayNames[laneName] || laneName;
             mermaid += `  subgraph ${sgName}["${displayName}"]\n`;
             
             // Add nodes for each task in the lane

@@ -1,0 +1,152 @@
+flowchart TD
+  %% Define node styles
+  classDef event fill:#ffd,stroke:#33f,stroke-width:2px
+  classDef task fill:#bbf,stroke:#33f,stroke-width:2px
+  classDef message fill:#bfb,stroke:#070,stroke-width:2px
+  classDef gateway fill:#fcc,stroke:#f00,stroke-width:2px
+  classDef comment fill:#ffd,stroke:#bb0,stroke-width:1px
+  classDef dataObject fill:#ececff,stroke:#9370db,stroke-width:1px
+  classDef branch fill:#d5ffd5,stroke:#3cb371,stroke-width:1px
+  data_applicationdata[(ApplicationData)]:::dataObject
+  data_creditdata[(CreditData)]:::dataObject
+  data_agreementdata[(AgreementData)]:::dataObject
+  subgraph sg0["Customer"]
+    customer_start([Start]):::event
+    customer_apply_for_loan[apply for loan]:::task
+    customer_send_loan_application>send: Loan Application]:::message
+    customer_send_financial_documents>send: Financial Documents]:::message
+    customer_receive_document_request>receive: Document Request]:::message
+    customer_send_additional_documents>send: Additional Documents]:::message
+    customer_receive_approval_decision>receive: Approval Decision]:::message
+    customer_loan_approved{Loan Approved?}:::gateway
+    customer_sign_agreement["sign agreement"]:::branch
+    customer_send_signed_agreement["send: Signed Agreement"]:::branch
+    customer_receive_loan_disbursement["receive: Loan Disbursement"]:::branch
+    customer_end["!End"]:::branch
+    customer_receive_rejection_reason["receive: Rejection Reason"]:::branch
+    customer_end["!End"]:::branch
+  end
+  subgraph sg1["Loan Officer"]
+    loan_officer_receive_loan_application>receive: Loan Application]:::message
+    loan_officer_review_application[review application]:::task
+    loan_officer_application_complete{Application Complete?}:::gateway
+    loan_officer_verify_identity["verify identity"]:::branch
+    loan_officer_send_credit_check_request["send: Credit Check Request"]:::branch
+    loan_officer_send_document_request["send: Document Request"]:::branch
+    loan_officer_receive_additional_documents["receive: Additional Documents"]:::branch
+    loan_officer_receive_credit_report>receive: Credit Report]:::message
+    loan_officer_calculate_risk_score[calculate risk score]:::task
+    loan_officer_risk_acceptable{Risk Acceptable?}:::gateway
+    loan_officer_prepare_loan_terms["prepare loan terms"]:::branch
+    loan_officer_send_approval_request["send: Approval Request"]:::branch
+    loan_officer_prepare_rejection["prepare rejection"]:::branch
+    loan_officer_send_rejection_decision["send: Rejection Decision"]:::branch
+  end
+  subgraph sg2["Credit Bureau"]
+    credit_bureau_receive_credit_check_request>receive: Credit Check Request]:::message
+    credit_bureau_pull_credit_history[pull credit history]:::task
+    credit_bureau_analyze_payment_history[analyze payment history]:::task
+    credit_bureau_calculate_credit_score[calculate credit score]:::task
+    credit_bureau_generate_report[generate report]:::task
+    credit_bureau_send_credit_report>send: Credit Report]:::message
+  end
+  subgraph sg3["Underwriting"]
+    underwriting_receive_approval_request>receive: Approval Request]:::message
+    underwriting_review_financials[review financials]:::task
+    underwriting_assess_collateral[assess collateral]:::task
+    underwriting_meets_criteria{Meets Criteria?}:::gateway
+    underwriting_approve_approve_loan["approve loan"]:::branch
+    underwriting_set_interest_rate["set interest rate"]:::branch
+    underwriting_send_final_approval["send: Final Approval"]:::branch
+    underwriting_reject_reject_application["reject application"]:::branch
+    underwriting_document_reasons["document reasons"]:::branch
+    underwriting_send_final_rejection["send: Final Rejection"]:::branch
+  end
+  subgraph sg4["Legal Department"]
+    legal_department_receive_approved_loan[receive approved loan]:::task
+    legal_department_prepare_agreement[prepare agreement]:::task
+    legal_department_add_terms_and_conditions[add terms and conditions]:::task
+    legal_department_send_draft_agreement>send: Draft Agreement]:::message
+    legal_department_receive_signed_agreement>receive: Signed Agreement]:::message
+    legal_department_verify_signatures[verify signatures]:::task
+    legal_department_finalize_contract[finalize contract]:::task
+  end
+  subgraph sg5["Finance Department"]
+    finance_department_receive_disbursement_request[receive disbursement request]:::task
+    finance_department_verify_account_details[verify account details]:::task
+    finance_department_process_payment[process payment]:::task
+    finance_department_send_loan_disbursement>send: Loan Disbursement]:::message
+    finance_department_update_accounting[update accounting]:::task
+  end
+  style sg0 fill:#f9f9f9,stroke:#333,stroke-width:1px
+  style sg1 fill:#e6f3ff,stroke:#333,stroke-width:1px
+  style sg2 fill:#f9f9f9,stroke:#333,stroke-width:1px
+  style sg3 fill:#e6f3ff,stroke:#333,stroke-width:1px
+  style sg4 fill:#f9f9f9,stroke:#333,stroke-width:1px
+  style sg5 fill:#e6f3ff,stroke:#333,stroke-width:1px
+
+  %% Sequence flows
+  customer_start --> customer_apply_for_loan
+  customer_apply_for_loan --> customer_send_loan_application
+  customer_send_loan_application --> customer_send_financial_documents
+  customer_send_financial_documents --> customer_receive_document_request
+  customer_receive_document_request --> customer_send_additional_documents
+  customer_send_additional_documents --> customer_receive_approval_decision
+  customer_receive_approval_decision --> customer_loan_approved
+  loan_officer_receive_loan_application --> loan_officer_review_application
+  loan_officer_review_application --> loan_officer_application_complete
+  loan_officer_review_application --> loan_officer_receive_credit_report
+  loan_officer_receive_credit_report --> loan_officer_calculate_risk_score
+  loan_officer_calculate_risk_score --> loan_officer_risk_acceptable
+  credit_bureau_receive_credit_check_request --> credit_bureau_pull_credit_history
+  credit_bureau_pull_credit_history --> credit_bureau_analyze_payment_history
+  credit_bureau_analyze_payment_history --> credit_bureau_calculate_credit_score
+  credit_bureau_calculate_credit_score --> credit_bureau_generate_report
+  credit_bureau_generate_report --> credit_bureau_send_credit_report
+  underwriting_receive_approval_request --> underwriting_review_financials
+  underwriting_review_financials --> underwriting_assess_collateral
+  underwriting_assess_collateral --> underwriting_meets_criteria
+  legal_department_receive_approved_loan --> legal_department_prepare_agreement
+  legal_department_prepare_agreement --> legal_department_add_terms_and_conditions
+  legal_department_add_terms_and_conditions --> legal_department_send_draft_agreement
+  legal_department_send_draft_agreement --> legal_department_receive_signed_agreement
+  legal_department_receive_signed_agreement --> legal_department_verify_signatures
+  legal_department_verify_signatures --> legal_department_finalize_contract
+  finance_department_receive_disbursement_request --> finance_department_verify_account_details
+  finance_department_verify_account_details --> finance_department_process_payment
+  finance_department_process_payment --> finance_department_send_loan_disbursement
+  finance_department_send_loan_disbursement --> finance_department_update_accounting
+  customer_loan_approved -->|Yes| customer_sign_agreement
+  customer_loan_approved -->|Yes| customer_send_signed_agreement
+  customer_loan_approved -->|Yes| customer_receive_loan_disbursement
+  customer_loan_approved -->|No| customer_end
+  customer_loan_approved -->|No| customer_receive_rejection_reason
+  customer_loan_approved -->|No| customer_end
+  loan_officer_application_complete -->|Yes| loan_officer_verify_identity
+  loan_officer_application_complete -->|Yes| loan_officer_send_credit_check_request
+  loan_officer_application_complete -->|No| loan_officer_send_document_request
+  loan_officer_application_complete -->|No| loan_officer_receive_additional_documents
+  loan_officer_verify_identity --> loan_officer_receive_credit_report
+  loan_officer_send_credit_check_request --> loan_officer_receive_credit_report
+  loan_officer_risk_acceptable -->|Yes| loan_officer_prepare_loan_terms
+  loan_officer_risk_acceptable -->|Yes| loan_officer_send_approval_request
+  loan_officer_risk_acceptable -->|No| loan_officer_prepare_rejection
+  loan_officer_risk_acceptable -->|No| loan_officer_send_rejection_decision
+  underwriting_meets_criteria -->|Approve| underwriting_approve_approve_loan
+  underwriting_meets_criteria -->|Yes| underwriting_set_interest_rate
+  underwriting_meets_criteria -->|Yes| underwriting_send_final_approval
+  underwriting_meets_criteria -->|Reject| underwriting_reject_reject_application
+  underwriting_meets_criteria -->|No| underwriting_document_reasons
+  underwriting_meets_criteria -->|No| underwriting_send_final_rejection
+  customer_loan_approved --> loan_officer_receive_loan_application
+  loan_officer_risk_acceptable --> credit_bureau_receive_credit_check_request
+  credit_bureau_send_credit_report --> underwriting_receive_approval_request
+  underwriting_meets_criteria --> legal_department_receive_approved_loan
+  legal_department_finalize_contract --> finance_department_receive_disbursement_request
+  %% Message flows
+  customer_send_loan_application -.->|Loan Application| loan_officer_receive_loan_application
+  credit_bureau_send_credit_report -.->|Credit Report| loan_officer_receive_credit_report
+  %% Data flows
+  data_applicationdata -.-> loan_officer_receive_loan_application
+  data_creditdata -.-> credit_bureau_send_credit_report
+  data_agreementdata -.-> legal_department_receive_signed_agreement

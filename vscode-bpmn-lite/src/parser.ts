@@ -208,6 +208,7 @@ export class BpmnLiteParser {
         
         const eventName = line.substring(1).trim();
         const laneName = this.currentLane!.replace('@', '');
+        const normalizedLaneName = this.normalizeId(laneName);
         let eventType = 'intermediate';
         
         if (eventName.toLowerCase() === 'start') {
@@ -216,7 +217,7 @@ export class BpmnLiteParser {
             eventType = 'end';
         }
         
-        const eventId = `${laneName}_${eventType}`;
+        const eventId = `${normalizedLaneName}_${eventType}`;
         
         this.tasks[eventId] = {
             type: 'event',
@@ -284,7 +285,8 @@ export class BpmnLiteParser {
         }
         
         const laneName = this.currentLane!.replace('@', '');
-        const taskId = `${laneName}_${this.normalizeId(originalName)}`;
+        const normalizedLaneName = this.normalizeId(laneName);
+        const taskId = `${normalizedLaneName}_${this.normalizeId(originalName)}`;
         
         this.tasks[taskId] = {
             type: taskType,
@@ -316,7 +318,8 @@ export class BpmnLiteParser {
         
         const gatewayName = line.substring(1).trim();
         const laneName = this.currentLane!.replace('@', '');
-        const gatewayId = `${laneName}_${this.normalizeId(gatewayName)}`;
+        const normalizedLaneName = this.normalizeId(laneName);
+        const gatewayId = `${normalizedLaneName}_${this.normalizeId(gatewayName)}`;
         
         this.tasks[gatewayId] = {
             type: 'gateway',
@@ -347,7 +350,8 @@ export class BpmnLiteParser {
         const parentGateway = this.gatewayStack[this.gatewayStack.length - 1];
         const branchName = line.substring(1).trim();
         const laneName = this.currentLane!.replace('@', '');
-        const branchId = `${laneName}_${this.normalizeId(branchName)}`;
+        const normalizedLaneName = this.normalizeId(laneName);
+        const branchId = `${normalizedLaneName}_${this.normalizeId(branchName)}`;
         
         let displayName = branchName;
         let branchLabel = branchChar === '+' ? 'Yes' : 'No';
@@ -386,7 +390,8 @@ export class BpmnLiteParser {
         
         const commentText = line.substring(1).trim();
         const laneName = this.currentLane!.replace('@', '');
-        const commentId = `${laneName}_comment_${this.normalizeId(commentText.substring(0, 20))}`;
+        const normalizedLaneName = this.normalizeId(laneName);
+        const commentId = `${normalizedLaneName}_comment_${this.normalizeId(commentText.substring(0, 20))}`;
         
         this.tasks[commentId] = {
             type: 'comment',
@@ -973,6 +978,7 @@ export class BpmnLiteParser {
         });
 
         const laneNodes: Record<string, string[]> = {};
+        const laneDisplayNames: Record<string, string> = {};
         
         Object.entries(this.lanes).forEach(([laneName, lane]) => {
             const normalizedLaneName = this.normalizeId(laneName.replace('@', ''));
@@ -980,13 +986,16 @@ export class BpmnLiteParser {
                 const task = this.tasks[taskId];
                 return task;
             });
+            // Store original lane name for display
+            laneDisplayNames[normalizedLaneName] = laneName.replace('@', '');
         });
         
         Object.entries(laneNodes).forEach(([laneName, taskIds], index) => {
             if (taskIds.length > 0) {
                 // Use sg prefix to ensure valid subgraph names
                 const sgName = `sg${index}`;
-                const displayName = laneName.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+                // Use the original lane name for display
+                const displayName = laneDisplayNames[laneName] || laneName;
                 mermaid += `  subgraph ${sgName}["${displayName}"]\n`;
                 
                 taskIds.forEach(taskId => {

@@ -1,0 +1,120 @@
+flowchart TD
+  %% Define node styles
+  classDef event fill:#ffd,stroke:#33f,stroke-width:2px
+  classDef task fill:#bbf,stroke:#33f,stroke-width:2px
+  classDef message fill:#bfb,stroke:#070,stroke-width:2px
+  classDef gateway fill:#fcc,stroke:#f00,stroke-width:2px
+  classDef comment fill:#ffd,stroke:#bb0,stroke-width:1px
+  classDef dataObject fill:#ececff,stroke:#9370db,stroke-width:1px
+  classDef branch fill:#d5ffd5,stroke:#3cb371,stroke-width:1px
+  data_orderdata[(OrderData)]:::dataObject
+  data_paymentdata[(PaymentData)]:::dataObject
+  data_shipmentdata[(ShipmentData)]:::dataObject
+  subgraph sg0["Customer"]
+    customer_start([Start]):::event
+    customer_browse_products[browse products]:::task
+    customer_add_to_cart[add to cart]:::task
+    customer_proceed_to_checkout[proceed to checkout]:::task
+    customer_send_order_details>send: Order Details]:::message
+    customer_send_payment_information>send: Payment Information]:::message
+    customer_receive_order_confirmation>receive: Order Confirmation]:::message
+    customer_receive_shipment_notification>receive: Shipment Notification]:::message
+    customer_receive_package>receive: Package]:::message
+    customer_end([End]):::event
+  end
+  subgraph sg1["Payment Gateway"]
+    payment_gateway_receive_payment_information>receive: Payment Information]:::message
+    payment_gateway_validate_card[validate card]:::task
+    payment_gateway_payment_valid{Payment Valid?}:::gateway
+    payment_gateway_process_payment["process payment"]:::branch
+    payment_gateway_send_payment_success["send: Payment Success"]:::branch
+    payment_gateway_send_payment_failed["send: Payment Failed"]:::branch
+    payment_gateway_end["!End"]:::branch
+  end
+  subgraph sg2["Order Management System"]
+    order_management_system_receive_order_details>receive: Order Details]:::message
+    order_management_system_receive_payment_success>receive: Payment Success]:::message
+    order_management_system_create_order[create order]:::task
+    order_management_system_send_order_confirmation>send: Order Confirmation]:::message
+    order_management_system_send_inventory_request>send: Inventory Request]:::message
+    order_management_system_receive_inventory_confirmed>receive: Inventory Confirmed]:::message
+    order_management_system_send_fulfillment_request>send: Fulfillment Request]:::message
+    order_management_system_receive_shipment_details>receive: Shipment Details]:::message
+    order_management_system_send_shipment_notification>send: Shipment Notification]:::message
+    order_management_system_update_order_status[update order status]:::task
+  end
+  subgraph sg3["Inventory System"]
+    inventory_system_receive_inventory_request>receive: Inventory Request]:::message
+    inventory_system_check_stock[check stock]:::task
+    inventory_system_stock_available{Stock Available?}:::gateway
+    inventory_system_reserve_items["reserve items"]:::branch
+    inventory_system_send_inventory_confirmed["send: Inventory Confirmed"]:::branch
+    inventory_system_send_out_of_stock["send: Out of Stock"]:::branch
+    inventory_system_trigger_reorder["trigger reorder"]:::branch
+  end
+  subgraph sg4["Fulfillment Center"]
+    fulfillment_center_receive_fulfillment_request>receive: Fulfillment Request]:::message
+    fulfillment_center_pick_items[pick items]:::task
+    fulfillment_center_pack_order[pack order]:::task
+    fulfillment_center_generate_tracking[generate tracking]:::task
+    fulfillment_center_ship_package[ship package]:::task
+    fulfillment_center_send_shipment_details>send: Shipment Details]:::message
+  end
+  style sg0 fill:#f9f9f9,stroke:#333,stroke-width:1px
+  style sg1 fill:#e6f3ff,stroke:#333,stroke-width:1px
+  style sg2 fill:#f9f9f9,stroke:#333,stroke-width:1px
+  style sg3 fill:#e6f3ff,stroke:#333,stroke-width:1px
+  style sg4 fill:#f9f9f9,stroke:#333,stroke-width:1px
+
+  %% Sequence flows
+  customer_start --> customer_browse_products
+  customer_browse_products --> customer_add_to_cart
+  customer_add_to_cart --> customer_proceed_to_checkout
+  customer_proceed_to_checkout --> customer_send_order_details
+  customer_send_order_details --> customer_send_payment_information
+  customer_send_payment_information --> customer_receive_order_confirmation
+  customer_receive_order_confirmation --> customer_receive_shipment_notification
+  customer_receive_shipment_notification --> customer_receive_package
+  customer_receive_package --> customer_end
+  payment_gateway_receive_payment_information --> payment_gateway_validate_card
+  payment_gateway_validate_card --> payment_gateway_payment_valid
+  order_management_system_receive_order_details --> order_management_system_receive_payment_success
+  order_management_system_receive_payment_success --> order_management_system_create_order
+  order_management_system_create_order --> order_management_system_send_order_confirmation
+  order_management_system_send_order_confirmation --> order_management_system_send_inventory_request
+  order_management_system_send_inventory_request --> order_management_system_receive_inventory_confirmed
+  order_management_system_receive_inventory_confirmed --> order_management_system_send_fulfillment_request
+  order_management_system_send_fulfillment_request --> order_management_system_receive_shipment_details
+  order_management_system_receive_shipment_details --> order_management_system_send_shipment_notification
+  order_management_system_send_shipment_notification --> order_management_system_update_order_status
+  inventory_system_receive_inventory_request --> inventory_system_check_stock
+  inventory_system_check_stock --> inventory_system_stock_available
+  fulfillment_center_receive_fulfillment_request --> fulfillment_center_pick_items
+  fulfillment_center_pick_items --> fulfillment_center_pack_order
+  fulfillment_center_pack_order --> fulfillment_center_generate_tracking
+  fulfillment_center_generate_tracking --> fulfillment_center_ship_package
+  fulfillment_center_ship_package --> fulfillment_center_send_shipment_details
+  payment_gateway_payment_valid -->|Yes| payment_gateway_process_payment
+  payment_gateway_payment_valid -->|Yes| payment_gateway_send_payment_success
+  payment_gateway_payment_valid -->|No| payment_gateway_send_payment_failed
+  payment_gateway_payment_valid -->|No| payment_gateway_end
+  inventory_system_stock_available -->|Yes| inventory_system_reserve_items
+  inventory_system_stock_available -->|Yes| inventory_system_send_inventory_confirmed
+  inventory_system_stock_available -->|No| inventory_system_send_out_of_stock
+  inventory_system_stock_available -->|No| inventory_system_trigger_reorder
+  customer_end --> payment_gateway_receive_payment_information
+  payment_gateway_payment_valid --> order_management_system_receive_order_details
+  order_management_system_update_order_status --> inventory_system_receive_inventory_request
+  inventory_system_stock_available --> fulfillment_center_receive_fulfillment_request
+  %% Message flows
+  customer_send_order_details -.->|Order Details| order_management_system_receive_order_details
+  customer_send_payment_information -.->|Payment Information| payment_gateway_receive_payment_information
+  order_management_system_send_order_confirmation -.->|Order Confirmation| customer_receive_order_confirmation
+  order_management_system_send_inventory_request -.->|Inventory Request| inventory_system_receive_inventory_request
+  order_management_system_send_fulfillment_request -.->|Fulfillment Request| fulfillment_center_receive_fulfillment_request
+  order_management_system_send_shipment_notification -.->|Shipment Notification| customer_receive_shipment_notification
+  fulfillment_center_send_shipment_details -.->|Shipment Details| order_management_system_receive_shipment_details
+  %% Data flows
+  data_orderdata -.-> order_management_system_receive_order_details
+  data_paymentdata -.-> payment_gateway_receive_payment_information
+  data_shipmentdata -.-> fulfillment_center_send_shipment_details

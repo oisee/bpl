@@ -1,0 +1,160 @@
+flowchart TD
+  %% Define node styles
+  classDef event fill:#ffd,stroke:#33f,stroke-width:2px
+  classDef task fill:#bbf,stroke:#33f,stroke-width:2px
+  classDef message fill:#bfb,stroke:#070,stroke-width:2px
+  classDef gateway fill:#fcc,stroke:#f00,stroke-width:2px
+  classDef comment fill:#ffd,stroke:#bb0,stroke-width:1px
+  classDef dataObject fill:#ececff,stroke:#9370db,stroke-width:1px
+  classDef branch fill:#d5ffd5,stroke:#3cb371,stroke-width:1px
+  data_incidentdata[(IncidentData)]:::dataObject
+  data_resolutiondata[(ResolutionData)]:::dataObject
+  subgraph sg0["End User"]
+    end_user_start([Start]):::event
+    end_user_experience_issue[experience issue]:::task
+    end_user_send_incident_report>send: Incident Report]:::message
+    end_user_receive_ticket_number>receive: Ticket Number]:::message
+    end_user_receive_status_update>receive: Status Update]:::message
+    end_user_issue_resolved{Issue Resolved?}:::gateway
+    end_user_confirm_resolution["confirm resolution"]:::branch
+    end_user_rate_service["rate service"]:::branch
+    end_user_end["!End"]:::branch
+    end_user_provide_more_info["provide more info"]:::branch
+    end_user_send_additional_details["send: Additional Details"]:::branch
+  end
+  subgraph sg1["Service Desk"]
+    service_desk_receive_incident_report>receive: Incident Report]:::message
+    service_desk_log_incident[log incident]:::task
+    service_desk_send_ticket_number>send: Ticket Number]:::message
+    service_desk_categorize_issue[categorize issue]:::task
+    service_desk_severity_level{Severity Level?}:::gateway
+    service_desk_critical_escalate_immediately["escalate immediately"]:::branch
+    service_desk_high_assign_to_l2["assign to L2"]:::branch
+    service_desk_medium_assign_to_l1["assign to L1"]:::branch
+    service_desk_low_add_to_queue["add to queue"]:::branch
+    service_desk_send_initial_response>send: Initial Response]:::message
+    service_desk_receive_resolution_details>receive: Resolution Details]:::message
+    service_desk_verify_resolution[verify resolution]:::task
+    service_desk_send_status_update>send: Status Update]:::message
+    service_desk_close_ticket[close ticket]:::task
+  end
+  subgraph sg2["L1 Support"]
+    l1_support_receive_incident[receive incident]:::task
+    l1_support_analyze_issue[analyze issue]:::task
+    l1_support_can_resolve{Can Resolve?}:::gateway
+    l1_support_apply_fix["apply fix"]:::branch
+    l1_support_test_solution["test solution"]:::branch
+    l1_support_send_resolution_details["send: Resolution Details"]:::branch
+    l1_support_escalate_to_l2["escalate to L2"]:::branch
+    l1_support_send_escalation_note["send: Escalation Note"]:::branch
+  end
+  subgraph sg3["L2 Support"]
+    l2_support_receive_escalation[receive escalation]:::task
+    l2_support_investigate_root_cause[investigate root cause]:::task
+    l2_support_known_issue{Known Issue?}:::gateway
+    l2_support_apply_known_fix["apply known fix"]:::branch
+    l2_support_update_knowledge_base["update knowledge base"]:::branch
+    l2_support_research_solution["research solution"]:::branch
+    l2_support_test_workaround["test workaround"]:::branch
+    l2_support_implement_solution[implement solution]:::task
+    l2_support_send_resolution_details>send: Resolution Details]:::message
+  end
+  subgraph sg4["L3 Support"]
+    l3_support_receive_critical_escalation[receive critical escalation]:::task
+    l3_support_perform_deep_analysis[perform deep analysis]:::task
+    l3_support_system_issue{System Issue?}:::gateway
+    l3_support_fix_system["fix system"]:::branch
+    l3_support_deploy_patch["deploy patch"]:::branch
+    l3_support_vendor_escalation["vendor escalation"]:::branch
+    l3_support_await_vendor_fix["await vendor fix"]:::branch
+    l3_support_document_solution[document solution]:::task
+    l3_support_send_resolution_details>send: Resolution Details]:::message
+  end
+  subgraph sg5["Monitoring System"]
+    monitoring_system_detect_anomaly[detect anomaly]:::task
+    monitoring_system_critical_alert{Critical Alert?}:::gateway
+    monitoring_system_send_auto_incident["send: Auto Incident"]:::branch
+    monitoring_system_page_on_call["page on-call"]:::branch
+    monitoring_system_log_warning["log warning"]:::branch
+    monitoring_system_update_dashboard["update dashboard"]:::branch
+  end
+  style sg0 fill:#f9f9f9,stroke:#333,stroke-width:1px
+  style sg1 fill:#e6f3ff,stroke:#333,stroke-width:1px
+  style sg2 fill:#f9f9f9,stroke:#333,stroke-width:1px
+  style sg3 fill:#e6f3ff,stroke:#333,stroke-width:1px
+  style sg4 fill:#f9f9f9,stroke:#333,stroke-width:1px
+  style sg5 fill:#e6f3ff,stroke:#333,stroke-width:1px
+
+  %% Sequence flows
+  end_user_start --> end_user_experience_issue
+  end_user_experience_issue --> end_user_send_incident_report
+  end_user_send_incident_report --> end_user_receive_ticket_number
+  end_user_receive_ticket_number --> end_user_receive_status_update
+  end_user_receive_status_update --> end_user_issue_resolved
+  service_desk_receive_incident_report --> service_desk_log_incident
+  service_desk_log_incident --> service_desk_send_ticket_number
+  service_desk_send_ticket_number --> service_desk_categorize_issue
+  service_desk_categorize_issue --> service_desk_severity_level
+  service_desk_categorize_issue --> service_desk_send_initial_response
+  service_desk_send_initial_response --> service_desk_receive_resolution_details
+  service_desk_receive_resolution_details --> service_desk_verify_resolution
+  service_desk_verify_resolution --> service_desk_send_status_update
+  service_desk_send_status_update --> service_desk_close_ticket
+  l1_support_receive_incident --> l1_support_analyze_issue
+  l1_support_analyze_issue --> l1_support_can_resolve
+  l2_support_receive_escalation --> l2_support_investigate_root_cause
+  l2_support_investigate_root_cause --> l2_support_known_issue
+  l2_support_investigate_root_cause --> l2_support_implement_solution
+  l2_support_implement_solution --> l2_support_send_resolution_details
+  l3_support_receive_critical_escalation --> l3_support_perform_deep_analysis
+  l3_support_perform_deep_analysis --> l3_support_system_issue
+  l3_support_perform_deep_analysis --> l3_support_document_solution
+  l3_support_document_solution --> l3_support_send_resolution_details
+  monitoring_system_detect_anomaly --> monitoring_system_critical_alert
+  end_user_issue_resolved -->|Yes| end_user_confirm_resolution
+  end_user_issue_resolved -->|Yes| end_user_rate_service
+  end_user_issue_resolved -->|Yes| end_user_end
+  end_user_issue_resolved -->|No| end_user_provide_more_info
+  end_user_issue_resolved -->|No| end_user_send_additional_details
+  service_desk_severity_level -->|Critical| service_desk_critical_escalate_immediately
+  service_desk_severity_level -->|High| service_desk_high_assign_to_l2
+  service_desk_severity_level -->|Medium| service_desk_medium_assign_to_l1
+  service_desk_severity_level -->|Low| service_desk_low_add_to_queue
+  service_desk_critical_escalate_immediately --> service_desk_send_initial_response
+  service_desk_high_assign_to_l2 --> service_desk_send_initial_response
+  service_desk_medium_assign_to_l1 --> service_desk_send_initial_response
+  l1_support_can_resolve -->|Yes| l1_support_apply_fix
+  l1_support_can_resolve -->|Yes| l1_support_test_solution
+  l1_support_can_resolve -->|Yes| l1_support_send_resolution_details
+  l1_support_can_resolve -->|No| l1_support_escalate_to_l2
+  l1_support_can_resolve -->|No| l1_support_send_escalation_note
+  l2_support_known_issue -->|Yes| l2_support_apply_known_fix
+  l2_support_known_issue -->|Yes| l2_support_update_knowledge_base
+  l2_support_known_issue -->|No| l2_support_research_solution
+  l2_support_known_issue -->|No| l2_support_test_workaround
+  l2_support_apply_known_fix --> l2_support_implement_solution
+  l2_support_update_knowledge_base --> l2_support_implement_solution
+  l3_support_system_issue -->|Yes| l3_support_fix_system
+  l3_support_system_issue -->|Yes| l3_support_deploy_patch
+  l3_support_system_issue -->|No| l3_support_vendor_escalation
+  l3_support_system_issue -->|No| l3_support_await_vendor_fix
+  l3_support_fix_system --> l3_support_document_solution
+  l3_support_deploy_patch --> l3_support_document_solution
+  monitoring_system_critical_alert -->|Yes| monitoring_system_send_auto_incident
+  monitoring_system_critical_alert -->|Yes| monitoring_system_page_on_call
+  monitoring_system_critical_alert -->|No| monitoring_system_log_warning
+  monitoring_system_critical_alert -->|No| monitoring_system_update_dashboard
+  end_user_issue_resolved --> service_desk_receive_incident_report
+  service_desk_close_ticket --> l1_support_receive_incident
+  l1_support_can_resolve --> l2_support_receive_escalation
+  l2_support_send_resolution_details --> l3_support_receive_critical_escalation
+  l3_support_send_resolution_details --> monitoring_system_detect_anomaly
+  %% Message flows
+  end_user_send_incident_report -.->|Incident Report| service_desk_receive_incident_report
+  service_desk_send_ticket_number -.->|Ticket Number| end_user_receive_ticket_number
+  service_desk_send_status_update -.->|Status Update| end_user_receive_status_update
+  l2_support_send_resolution_details -.->|Resolution Details| service_desk_receive_resolution_details
+  l3_support_send_resolution_details -.->|Resolution Details| service_desk_receive_resolution_details
+  %% Data flows
+  data_incidentdata -.-> service_desk_receive_incident_report
+  data_resolutiondata -.-> l3_support_send_resolution_details

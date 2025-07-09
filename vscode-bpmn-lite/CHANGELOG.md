@@ -2,6 +2,24 @@
 
 All notable changes to the "bpmn-lite" extension will be documented in this file.
 
+## [0.3.2] - 2025-07-09
+
+### Fixed
+- Complete fix for Mermaid node ID generation with spaces
+- All lane names are now properly normalized when creating node IDs
+- Fixed node ID generation in events, gateways, branches, and comments
+- Regenerated all example .mmd files with correct syntax
+
+### Added
+- Repository field in package.json for better VSCode marketplace integration
+
+## [0.3.1] - 2025-07-09
+
+### Fixed
+- Fixed Mermaid syntax errors when lane names contain spaces
+- Preserved original lane names in subgraph display labels
+- Examples with multi-word lane names (e.g., "Payment Gateway") now render correctly
+
 ## [0.3.0] - 2025-07-09
 
 ### Added
