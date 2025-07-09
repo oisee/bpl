@@ -90,6 +90,9 @@ export class BpmnLiteParser {
             }
         }
 
+        // Auto-inject connection breaks after End events
+        this.injectConnectionBreaksAfterEndEvents(lines);
+
         // Automatically connect sequential tasks
         this.connectSequentialTasks();
 
@@ -351,6 +354,40 @@ export class BpmnLiteParser {
         const branchName = line.substring(1).trim();
         const laneName = this.currentLane!.replace('@', '');
         const normalizedLaneName = this.normalizeId(laneName);
+        
+        // Check if this is an End event branch
+        if (branchName.toLowerCase() === '!end' || branchName.toLowerCase() === 'end') {
+            // Don't create a branch task, connect directly to the lane's end event
+            const endEventId = `${normalizedLaneName}_end`;
+            
+            // Ensure end event exists
+            if (!this.tasks[endEventId]) {
+                this.tasks[endEventId] = {
+                    type: 'event',
+                    eventType: 'end',
+                    name: 'End',
+                    id: endEventId,
+                    lane: laneName
+                };
+                
+                // Add to lane's tasks if not already there
+                if (!this.lanes[this.currentLane!].tasks.includes(endEventId)) {
+                    this.lanes[this.currentLane!].tasks.push(endEventId);
+                }
+                
+                // Add to events list
+                if (!this.events.includes(endEventId)) {
+                    this.events.push(endEventId);
+                }
+            }
+            
+            // Connect gateway to end event directly with appropriate label
+            const branchLabel = branchChar === '+' ? 'Yes' : 'No';
+            this.addConnection('flow', parentGateway, endEventId, branchLabel);
+            
+            return endEventId;
+        }
+        
         const branchId = `${normalizedLaneName}_${this.normalizeId(branchName)}`;
         
         let displayName = branchName;
@@ -539,6 +576,34 @@ export class BpmnLiteParser {
             name: name,
             sourceRef: sourceId,
             targetRef: targetId
+        });
+    }
+
+    private injectConnectionBreaksAfterEndEvents(lines: string[]): void {
+        // Find all End events and check if they're at the end of their lanes
+        Object.entries(this.lanes).forEach(([laneName, lane]) => {
+            const lastTaskId = lane.tasks[lane.tasks.length - 1];
+            if (lastTaskId && this.tasks[lastTaskId]) {
+                const lastTask = this.tasks[lastTaskId];
+                
+                // Check if the last task is an End event
+                if (lastTask.type === 'event' && lastTask.eventType === 'end') {
+                    // Find the line number of this End event
+                    const taskLineNumber = this.taskLineNumbers[lastTaskId];
+                    if (taskLineNumber !== undefined) {
+                        // Check if there's already a connection break after this line
+                        const hasBreakAfter = this.connectionBreaks.some(breakLine => 
+                            breakLine > taskLineNumber && breakLine <= taskLineNumber + 2
+                        );
+                        
+                        if (!hasBreakAfter) {
+                            // Auto-inject a connection break after this End event
+                            this.connectionBreaks.push(taskLineNumber + 1);
+                            console.log(`Auto-injected connection break after End event at line ${taskLineNumber + 1}`);
+                        }
+                    }
+                }
+            }
         });
     }
 
@@ -1049,6 +1114,10 @@ export class BpmnLiteParser {
                 if (source && target) {
                     if (source.type === 'gateway' && target.type === 'branch') {
                         mermaid += `  ${conn.sourceRef} -->|${target.label}| ${conn.targetRef}\n`;
+                    } else if (source.type === 'gateway' && target.type === 'event' && target.eventType === 'end') {
+                        // Gateway to End event with label (from branch)
+                        const label = conn.name || 'Yes'; // Default to 'Yes' if no label specified
+                        mermaid += `  ${conn.sourceRef} -->|${label}| ${conn.targetRef}\n`;
                     } else {
                         mermaid += `  ${conn.sourceRef} --> ${conn.targetRef}\n`;
                     }
