@@ -12,6 +12,8 @@ export class BpmnLiteParser {
     private lastTask: string | null = null;
     private taskScope: Record<string, string> = {};
     private gatewayStack: string[] = [];
+    private connectionBreaks: number[] = [];
+    private taskLineNumbers: Record<string, number> = {};
 
     parse(text: string): any {
         // Reset state
@@ -27,6 +29,8 @@ export class BpmnLiteParser {
         this.lastTask = null;
         this.taskScope = {};
         this.gatewayStack = [];
+        this.connectionBreaks = [];
+        this.taskLineNumbers = {};
 
         const lines = text.split('\n');
         
@@ -38,6 +42,12 @@ export class BpmnLiteParser {
             const originalLine = lines[i];
             const line = originalLine.trim();
             if (!line) continue; // Skip empty lines
+            
+            // Check for connection break line
+            if (line === '---' || line.match(/^-{3,}$/)) {
+                this.connectionBreaks.push(i);
+                continue; // Skip processing this line further
+            }
             
             // Find first non-whitespace character for line type detection
             const firstNonWhitespace = line.match(/\S/);
@@ -56,8 +66,8 @@ export class BpmnLiteParser {
                     const part = parts[j].trim();
                     if (!part) continue;
                     
-                    // Process this part
-                    const taskId = this.processLinePart(part, firstChar);
+                    // Process this part (pass line number)
+                    const taskId = this.processLinePart(part, firstChar, i);
                     
                     // Create connection if we have a previous task
                     if (prevTaskId && taskId) {
@@ -75,8 +85,8 @@ export class BpmnLiteParser {
                     }
                 }
             } else {
-                // Single part, process normally
-                this.processLinePart(line, firstChar);
+                // Single part, process normally (pass line number)
+                this.processLinePart(line, firstChar, i);
             }
         }
 
@@ -141,7 +151,7 @@ export class BpmnLiteParser {
         return parts;
     }
 
-    private processLinePart(line: string, firstChar: string): string | null {
+    private processLinePart(line: string, firstChar: string, lineNumber?: number): string | null {
         let taskId: string | null = null;
         
         switch(firstChar) {
@@ -182,6 +192,10 @@ export class BpmnLiteParser {
         
         if (taskId) {
             this.lastTask = taskId;
+            // Store line number for this task
+            if (lineNumber !== undefined) {
+                this.taskLineNumbers[taskId] = lineNumber;
+            }
         }
         
         return taskId;
@@ -423,7 +437,15 @@ export class BpmnLiteParser {
                             });
                         }
                         
-                        this.addConnection('message', sourceId, targetId, messageName);
+                        // Check if there's a connection break between these tasks
+                        const hasBreak = this.hasConnectionBreakBetween(
+                            this.taskLineNumbers[sourceId],
+                            this.taskLineNumbers[targetId]
+                        );
+                        
+                        if (!hasBreak) {
+                            this.addConnection('message', sourceId, targetId, messageName);
+                        }
                         return targetId;
                     }
                 } else {
@@ -444,7 +466,15 @@ export class BpmnLiteParser {
                             });
                         }
                         
-                        this.addConnection('message', sourceId, targetId, messageName);
+                        // Check if there's a connection break between these tasks
+                        const hasBreak = this.hasConnectionBreakBetween(
+                            this.taskLineNumbers[sourceId],
+                            this.taskLineNumbers[targetId]
+                        );
+                        
+                        if (!hasBreak) {
+                            this.addConnection('message', sourceId, targetId, messageName);
+                        }
                         return targetId;
                     }
                 }
@@ -475,7 +505,15 @@ export class BpmnLiteParser {
             if (taskRef) {
                 const taskId = this.resolveTaskId(taskRef);
                 if (taskId) {
-                    this.addConnection('data', dataObjId, taskId);
+                    // Check if there's a connection break between these tasks
+                    const hasBreak = this.hasConnectionBreakBetween(
+                        this.taskLineNumbers[dataObjId],
+                        this.taskLineNumbers[taskId]
+                    );
+                    
+                    if (!hasBreak) {
+                        this.addConnection('data', dataObjId, taskId);
+                    }
                 }
             }
             
@@ -595,7 +633,13 @@ export class BpmnLiteParser {
                         conn.targetRef === currentTaskId
                     );
                     
-                    if (!connectionExists) {
+                    // Check if there's a connection break between these tasks
+                    const hasBreak = this.hasConnectionBreakBetween(
+                        this.taskLineNumbers[prevTask],
+                        this.taskLineNumbers[currentTaskId]
+                    );
+                    
+                    if (!connectionExists && !hasBreak) {
                         this.addConnection('flow', prevTask, currentTaskId);
                     }
                 }
@@ -650,7 +694,13 @@ export class BpmnLiteParser {
                     conn.targetRef === matchingReceive.id
                 );
                 
-                if (!connectionExists) {
+                // Check if there's a connection break between these tasks
+                const hasBreak = this.hasConnectionBreakBetween(
+                    this.taskLineNumbers[sendTask.id],
+                    this.taskLineNumbers[matchingReceive.id]
+                );
+                
+                if (!connectionExists && !hasBreak) {
                     const messageId = `message_${this.normalizeId(messageName)}`;
                     
                     if (!this.messages.find(m => m.id === messageId)) {
@@ -715,7 +765,14 @@ export class BpmnLiteParser {
                     conn.targetRef === firstTaskInNextLane
                 );
                 
-                if (!connectionExists && !targetAlreadyConnected) {
+                // Check if there's a connection break between these tasks
+                const hasBreak = this.hasConnectionBreakBetween(
+                    this.taskLineNumbers[lastTaskInCurrentLane],
+                    this.taskLineNumbers[firstTaskInNextLane]
+                );
+                
+                // Only add if no connection exists, target isn't already connected, and no break
+                if (!connectionExists && !targetAlreadyConnected && !hasBreak) {
                     this.addConnection('flow', lastTaskInCurrentLane, firstTaskInNextLane);
                 }
             }
@@ -755,7 +812,13 @@ export class BpmnLiteParser {
                         conn.targetRef === firstTaskAfterStart
                     );
                     
-                    if (!connectionExists) {
+                    // Check if there's a connection break between these tasks
+                    const hasBreak = this.hasConnectionBreakBetween(
+                        this.taskLineNumbers[startEventId],
+                        this.taskLineNumbers[firstTaskAfterStart]
+                    );
+                    
+                    if (!connectionExists && !hasBreak) {
                         this.addConnection('flow', startEventId, firstTaskAfterStart);
                     }
                 }
@@ -782,7 +845,13 @@ export class BpmnLiteParser {
                         conn.targetRef === endEventId
                     );
                     
-                    if (!connectionExists) {
+                    // Check if there's a connection break between these tasks
+                    const hasBreak = this.hasConnectionBreakBetween(
+                        this.taskLineNumbers[lastTaskBeforeEnd],
+                        this.taskLineNumbers[endEventId]
+                    );
+                    
+                    if (!connectionExists && !hasBreak) {
                         this.addConnection('flow', lastTaskBeforeEnd, endEventId);
                     }
                 }
@@ -872,6 +941,19 @@ export class BpmnLiteParser {
         return name.toLowerCase()
             .replace(/[^a-z0-9]+/g, '_')
             .replace(/^_+|_+$/g, '');
+    }
+    
+    private hasConnectionBreakBetween(lineNum1: number | undefined, lineNum2: number | undefined): boolean {
+        // Check if there's a "---" line between two line numbers
+        if (lineNum1 === undefined || lineNum2 === undefined) return false;
+        
+        const minLine = Math.min(lineNum1, lineNum2);
+        const maxLine = Math.max(lineNum1, lineNum2);
+        
+        // Check if any connection break exists between these lines
+        return this.connectionBreaks.some(breakLine => 
+            breakLine > minLine && breakLine < maxLine
+        );
     }
 
     toMermaid(): string {

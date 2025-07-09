@@ -6,9 +6,7 @@
   "Customer waits for confirmation
   receive: Order Confirmation
   wait for confirmation
-  
----
-
+  ---
 @System
   receive: Payment Information
   process order

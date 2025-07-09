@@ -2,6 +2,24 @@
 
 All notable changes to the "bpmn-lite" extension will be documented in this file.
 
+## [0.2.0] - 2025-07-09
+
+### Added
+- Connection break feature using "---" separator
+  - Place "---" on its own line to prevent automatic connections between tasks
+  - Works for all connection types: sequence flows, message flows, and cross-lane connections
+  - Multiple consecutive "---" lines are treated as a single break
+  - Useful for creating disconnected process segments or controlling flow layout
+
+### Example
+```bpl
+@Lane1
+  task1
+  task2
+  ---
+  task3  // task2 will NOT connect to task3
+```
+
 ## [0.1.2] - 2025-06-30
 
 ### Fixed

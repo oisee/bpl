@@ -169,6 +169,8 @@
         this.lastTask = null;
         this.taskScope = {};
         this.gatewayStack = [];
+        this.connectionBreaks = []; // Track line numbers where "---" appears
+        this.taskLineNumbers = {}; // Track line numbers for each task
       }
 
       parse(text) {
@@ -185,6 +187,8 @@
         this.lastTask = null;
         this.taskScope = {};
         this.gatewayStack = [];
+        this.connectionBreaks = [];
+        this.taskLineNumbers = {};
 
         const lines = text.split('\n');
         
@@ -196,6 +200,12 @@
           const originalLine = lines[i];
           const line = originalLine.trim();
           if (!line) continue; // Skip empty lines
+          
+          // Check for connection break line
+          if (line === '---' || line.match(/^-{3,}$/)) {
+            this.connectionBreaks.push(i);
+            continue; // Skip processing this line further
+          }
           
           // Find first non-whitespace character for line type detection
           const firstNonWhitespace = line.match(/\S/);
@@ -214,8 +224,8 @@
               const part = parts[j].trim();
               if (!part) continue;
               
-              // Process this part
-              const taskId = this.processLinePart(part, firstChar);
+              // Process this part (pass line number)
+              const taskId = this.processLinePart(part, firstChar, i);
               
               // Create connection if we have a previous task
               if (prevTaskId && taskId) {
@@ -233,8 +243,8 @@
               }
             }
           } else {
-            // Single part, process normally
-            this.processLinePart(line, firstChar);
+            // Single part, process normally (pass line number)
+            this.processLinePart(line, firstChar, i);
           }
         }
 
@@ -300,7 +310,7 @@
         return parts;
       }
       
-      processLinePart(line, firstChar) {
+      processLinePart(line, firstChar, lineNumber) {
         // Process based on the first character
         let taskId = null;
         
@@ -346,6 +356,10 @@
         // Update last task if we created one
         if (taskId) {
           this.lastTask = taskId;
+          // Store line number for this task
+          if (lineNumber !== undefined) {
+            this.taskLineNumbers[taskId] = lineNumber;
+          }
         }
         
         return taskId;
@@ -627,9 +641,19 @@
                   console.log(`Added message: ${messageName} (${messageId})`);
                 }
                 
-                // Create connection in the right direction
-                this.addConnection('message', sourceId, targetId, messageName);
-                console.log(`SUCCESSFULLY added message flow: "${messageName}" from ${sourceId} to ${targetId}`);
+                // Check if there's a connection break between these tasks
+                const hasBreak = this.hasConnectionBreakBetween(
+                  this.taskLineNumbers[sourceId],
+                  this.taskLineNumbers[targetId]
+                );
+                
+                if (!hasBreak) {
+                  // Create connection in the right direction
+                  this.addConnection('message', sourceId, targetId, messageName);
+                  console.log(`SUCCESSFULLY added message flow: "${messageName}" from ${sourceId} to ${targetId}`);
+                } else {
+                  console.log(`Message flow blocked by connection break: "${messageName}" from ${sourceId} to ${targetId}`);
+                }
                 
                 return targetId; // Return the target as the last referenced task
               } else {
@@ -845,7 +869,13 @@
                 conn.targetRef === currentTaskId
               );
               
-              if (!connectionExists) {
+              // Check if there's a connection break between these tasks
+              const hasBreak = this.hasConnectionBreakBetween(
+                this.taskLineNumbers[prevTask],
+                this.taskLineNumbers[currentTaskId]
+              );
+              
+              if (!connectionExists && !hasBreak) {
                 this.addConnection('flow', prevTask, currentTaskId);
               }
             }
@@ -915,7 +945,13 @@
               conn.targetRef === matchingReceive.id
             );
             
-            if (!connectionExists) {
+            // Check if there's a connection break between these tasks
+            const hasBreak = this.hasConnectionBreakBetween(
+              this.taskLineNumbers[sendTask.id],
+              this.taskLineNumbers[matchingReceive.id]
+            );
+            
+            if (!connectionExists && !hasBreak) {
               // Create the message object
               const messageId = `message_${this.normalizeId(messageName)}`;
               
@@ -1012,8 +1048,14 @@
               conn.targetRef === firstTaskInNextLane
             );
             
-            // Only add if no connection exists and target isn't already connected
-            if (!connectionExists && !targetAlreadyConnected) {
+            // Check if there's a connection break between these tasks
+            const hasBreak = this.hasConnectionBreakBetween(
+              this.taskLineNumbers[lastTaskInCurrentLane],
+              this.taskLineNumbers[firstTaskInNextLane]
+            );
+            
+            // Only add if no connection exists, target isn't already connected, and no break
+            if (!connectionExists && !targetAlreadyConnected && !hasBreak) {
               this.addConnection('flow', lastTaskInCurrentLane, firstTaskInNextLane);
             }
           }
@@ -1061,7 +1103,13 @@
                 conn.targetRef === firstTaskAfterStart
               );
               
-              if (!connectionExists) {
+              // Check if there's a connection break between these tasks
+              const hasBreak = this.hasConnectionBreakBetween(
+                this.taskLineNumbers[startEventId],
+                this.taskLineNumbers[firstTaskAfterStart]
+              );
+              
+              if (!connectionExists && !hasBreak) {
                 this.addConnection('flow', startEventId, firstTaskAfterStart);
               }
             }
@@ -1093,7 +1141,13 @@
                 conn.targetRef === endEventId
               );
               
-              if (!connectionExists) {
+              // Check if there's a connection break between these tasks
+              const hasBreak = this.hasConnectionBreakBetween(
+                this.taskLineNumbers[lastTaskBeforeEnd],
+                this.taskLineNumbers[endEventId]
+              );
+              
+              if (!connectionExists && !hasBreak) {
                 this.addConnection('flow', lastTaskBeforeEnd, endEventId);
               }
             }
@@ -1203,6 +1257,19 @@
         return name.toLowerCase()
           .replace(/[^a-z0-9]+/g, '_')
           .replace(/^_+|_+$/g, '');
+      }
+      
+      hasConnectionBreakBetween(lineNum1, lineNum2) {
+        // Check if there's a "---" line between two line numbers
+        if (lineNum1 === undefined || lineNum2 === undefined) return false;
+        
+        const minLine = Math.min(lineNum1, lineNum2);
+        const maxLine = Math.max(lineNum1, lineNum2);
+        
+        // Check if any connection break exists between these lines
+        return this.connectionBreaks.some(breakLine => 
+          breakLine > minLine && breakLine < maxLine
+        );
       }
 
       toMermaid() {

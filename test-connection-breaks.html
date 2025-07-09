@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Connection Break Test</title>
+  <script src="src/index.html"></script>
+</head>
+<body>
+  <h1>Testing Connection Breaks</h1>
+  <textarea id="test-input" style="width: 100%; height: 300px;">
+:Order Process
+
+@Customer
+  place order
+  send: Payment Information
+  "Customer waits for confirmation
+  receive: Order Confirmation
+  wait for confirmation
+  ---
+@System
+  receive: Payment Information
+  process order
+  validate payment
+  ?Payment successful
+    +post payment
+    -stop order processing
+  ship order
+  send: Order Confirmation
+
+^Order @Customer.place order -> @System.process order
+#OrderData place order
+  </textarea>
+  
+  <button onclick="testParser()">Test Parser</button>
+  <pre id="output"></pre>
+  
+  <script>
+    function testParser() {
+      const input = document.getElementById('test-input').value;
+      const parser = new BpmnLiteParser();
+      const ast = parser.parse(input);
+      
+      // Show connection breaks and connections
+      const output = {
+        connectionBreaks: parser.connectionBreaks,
+        taskLineNumbers: parser.taskLineNumbers,
+        connections: parser.connections
+      };
+      
+      document.getElementById('output').textContent = JSON.stringify(output, null, 2);
+    }
+  </script>
+</body>
+</html>
