@@ -454,34 +454,46 @@
         const laneName = this.currentLane.replace('@', '');
         const normalizedLaneName = this.normalizeId(laneName);
         let eventType = 'intermediate';
+        let eventId;
         
         // Determine event type based on common keywords
         if (eventName.toLowerCase() === 'start') {
           eventType = 'start';
+          // Start events are process-level, not lane-specific
+          eventId = 'process_start';
         } else if (eventName.toLowerCase() === 'end') {
           eventType = 'end';
+          // End events are process-level, not lane-specific
+          eventId = 'process_end';
+        } else {
+          // Intermediate events can be lane-specific
+          eventId = `${normalizedLaneName}_${this.normalizeId(eventName)}`;
         }
         
-        const eventId = `${normalizedLaneName}_${eventType}`;
+        // Only create the event if it doesn't already exist (for Start/End)
+        if (!this.tasks[eventId]) {
+          this.tasks[eventId] = {
+            type: 'event',
+            eventType: eventType,
+            name: eventName,
+            id: eventId,
+            lane: eventType === 'start' || eventType === 'end' ? null : laneName // Process-level events have no lane
+          };
+          
+          // Track event for special handling
+          this.events.push(eventId);
+        }
         
-        this.tasks[eventId] = {
-          type: 'event',
-          eventType: eventType,
-          name: eventName,
-          id: eventId,
-          lane: laneName
-        };
-        
-        this.lanes[this.currentLane].tasks.push(eventId);
+        // For process-level events (Start/End), don't add to lane tasks
+        if (eventType !== 'start' && eventType !== 'end') {
+          this.lanes[this.currentLane].tasks.push(eventId);
+        }
         
         // Add event to scope for reference
         const simpleName = this.normalizeId(eventName);
         this.taskScope[simpleName] = eventId;
         this.taskScope[`${laneName}.${simpleName}`] = eventId;
         this.taskScope[`@${laneName}.${simpleName}`] = eventId;
-        
-        // Track event for special handling
-        this.events.push(eventId);
         
         return eventId;
       }
@@ -611,23 +623,18 @@
         
         // Check if this is an End event branch
         if (branchName.toLowerCase() === '!end' || branchName.toLowerCase() === 'end') {
-          // Don't create a branch task, connect directly to the lane's end event
-          const endEventId = `${normalizedLaneName}_end`;
+          // Don't create a branch task, connect directly to the process-level end event
+          const endEventId = 'process_end';
           
-          // Ensure end event exists
+          // Ensure process-level end event exists
           if (!this.tasks[endEventId]) {
             this.tasks[endEventId] = {
               type: 'event',
               eventType: 'end',
               name: 'End',
               id: endEventId,
-              lane: laneName
+              lane: null // Process-level event has no lane
             };
-            
-            // Add to lane's tasks if not already there
-            if (!this.lanes[this.currentLane].tasks.includes(endEventId)) {
-              this.lanes[this.currentLane].tasks.push(endEventId);
-            }
             
             // Add to events list
             if (!this.events.includes(endEventId)) {
@@ -868,31 +875,24 @@
       }
 
       injectConnectionBreaksAfterEndEvents(lines) {
-        // Find all End events and check if they're at the end of their lanes
-        Object.entries(this.lanes).forEach(([laneName, lane]) => {
-          const lastTaskId = lane.tasks[lane.tasks.length - 1];
-          if (lastTaskId && this.tasks[lastTaskId]) {
-            const lastTask = this.tasks[lastTaskId];
+        // Find all End event references in the text and auto-inject breaks
+        for (let i = 0; i < lines.length; i++) {
+          const line = lines[i].trim();
+          
+          // Check if this line contains an End event reference
+          if (line === '!End' || line === '!end' || line === '+!End' || line === '-!End') {
+            // Check if there's already a connection break after this line
+            const hasBreakAfter = this.connectionBreaks.some(breakLine => 
+              breakLine > i && breakLine <= i + 2
+            );
             
-            // Check if the last task is an End event
-            if (lastTask.type === 'event' && lastTask.eventType === 'end') {
-              // Find the line number of this End event
-              const taskLineNumber = this.taskLineNumbers[lastTaskId];
-              if (taskLineNumber !== undefined) {
-                // Check if there's already a connection break after this line
-                const hasBreakAfter = this.connectionBreaks.some(breakLine => 
-                  breakLine > taskLineNumber && breakLine <= taskLineNumber + 2
-                );
-                
-                if (!hasBreakAfter) {
-                  // Auto-inject a connection break after this End event
-                  this.connectionBreaks.push(taskLineNumber + 1);
-                  console.log(`Auto-injected connection break after End event at line ${taskLineNumber + 1}`);
-                }
-              }
+            if (!hasBreakAfter) {
+              // Auto-inject a connection break after this End event
+              this.connectionBreaks.push(i + 1);
+              console.log(`Auto-injected connection break after End event at line ${i + 1}`);
             }
           }
-        });
+        }
       }
 
       connectSequentialTasks() {
@@ -1430,6 +1430,13 @@
   classDef dataObject fill:#ececff,stroke:#9370db,stroke-width:1px
   classDef branch fill:#d5ffd5,stroke:#3cb371,stroke-width:1px
 `;
+
+        // Add process-level events (Start/End) outside of any subgraph
+        Object.values(this.tasks).forEach(task => {
+          if (task.type === 'event' && (task.eventType === 'start' || task.eventType === 'end') && task.lane === null) {
+            mermaid += `  ${task.id}([${task.name}]):::event\n`;
+          }
+        });
 
         // Add data objects
         this.dataObjects.forEach(dataObj => {
