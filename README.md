@@ -3,7 +3,7 @@
 A revolutionary way to create business process diagrams - write in plain text, see beautiful diagrams instantly! 🚀
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Version-0.1.0-blue.svg" alt="Version">
+  <img src="https://img.shields.io/badge/Version-0.4.0-blue.svg" alt="Version">
   <img src="https://img.shields.io/badge/License-MIT-green.svg" alt="License">
   <img src="https://img.shields.io/badge/PRs-Welcome-brightgreen.svg" alt="PRs Welcome">
 </p>
@@ -46,16 +46,20 @@ Switch between:
 
 ### 🔀 **Smart Connectivity**
 - **Gateway Support**: XOR decisions with custom branch labels
+- **End Event Normalization**: Smart handling of `!End`, `+!End`, `-!End` variations
+- **Auto-Connection Breaks**: Intelligent flow termination to prevent cross-lane leakage
 - **Message Flows**: Automatic connection between send/receive tasks
-- **Cross-Lane Flows**: Automatic sequential task connectivity
+- **Cross-Lane Flows**: Automatic sequential task connectivity with break detection
 - **Data Objects**: Attach data to any process step
 
 ### 📤 **Export Options**
 - `.bpl` - Source code format
 - `.json` - Abstract Syntax Tree
 - `.mmd` - Mermaid diagram code  
+- `.png` - High-resolution PNG images (with custom DPI)
+- `.svg` - Scalable vector graphics
 - `.xlsx` - Excel format for Visio import
-- `.bpmn` - **Coming Soon!** Native BPMN 2.0 XML (bpmn.io compatible)
+- `.bpmn` - Native BPMN 2.0 XML (Camunda 8 compatible)
 
 ## 🚀 Getting Started
 

@@ -56,6 +56,23 @@ Mark the start, end, or intermediate points:
   !End
 ```
 
+#### End Event Variations
+All End event formats map to the same terminal event:
+```bpl
+@Payment Gateway
+  ?Payment Valid
+    +process payment
+    +!End        // Standard end
+    -reject payment
+    -!End        // Also maps to same end event
+```
+
+**Smart End Event Handling:**
+- `!End` - Standard end event
+- `+!End` - Positive branch to end (becomes gateway → end with "Yes" label)
+- `-!End` - Negative branch to end (becomes gateway → end with "No" label)
+- Auto-injects connection breaks (`---`) after end events to prevent cross-lane flow
+
 ### 5. Gateways
 Decision points in your process:
 ```bpl

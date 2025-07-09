@@ -2,6 +2,26 @@
 
 All notable changes to the "bpmn-lite" extension will be documented in this file.
 
+## [0.4.0] - 2025-07-09
+
+### Major Features
+- **Complete End Event System**: Full implementation of End event normalization and flow control
+- **Advanced Gateway Logic**: Smart handling of gateway-to-end connections with proper labeling
+- **Auto-Flow Management**: Intelligent connection break injection for clean diagram structure
+- **Production Ready**: Comprehensive testing and validation of all core features
+
+### Added
+- **End Event Normalization**: All End events (`!End`, `+!End`, `-!End`) now map to a single end event per lane
+- **Gateway-to-End Connections**: Direct connections from gateways to End events with proper labels
+- **Auto-injected Connection Breaks**: Automatic insertion of `---` after End events to prevent cross-lane connections
+- **Improved Flow Termination**: End events properly terminate their flow paths
+
+### Fixed
+- `-!End` branches now connect directly to the lane's End event instead of creating separate branch tasks
+- Gateway-to-End connections display proper labels (Yes/No) in Mermaid diagrams
+- No more unintended connections from End events to subsequent lanes
+- Complete Mermaid syntax validation and error-free rendering
+
 ## [0.3.3] - 2025-07-09
 
 ### Added
