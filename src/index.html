@@ -153,6 +153,82 @@
     button:hover {
       background-color: #45a049;
     }
+    
+    .export-menu {
+      position: relative;
+      display: inline-block;
+    }
+    
+    .export-dropdown {
+      display: none;
+      position: absolute;
+      background-color: white;
+      min-width: 180px;
+      box-shadow: 0px 8px 16px 0px rgba(0,0,0,0.2);
+      z-index: 1000;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      top: 100%;
+      left: 0;
+      margin-top: 2px;
+    }
+    
+    .export-dropdown button {
+      width: 100%;
+      text-align: left;
+      padding: 10px 15px;
+      border: none;
+      border-radius: 0;
+      background-color: white;
+      color: #333;
+      font-size: 14px;
+    }
+    
+    .export-dropdown button:hover {
+      background-color: #f5f5f5;
+    }
+    
+    .export-dropdown button:first-child {
+      border-radius: 4px 4px 0 0;
+    }
+    
+    .export-dropdown button:last-child {
+      border-radius: 0 0 4px 4px;
+    }
+    
+    .export-menu.active .export-dropdown {
+      display: block;
+    }
+    
+    .controls {
+      display: flex;
+      gap: 8px;
+      padding: 10px;
+      background-color: #f5f5f5;
+      border-bottom: 1px solid #ccc;
+      align-items: center;
+    }
+    
+    .controls button {
+      background-color: #4CAF50;
+      color: white;
+      border: none;
+      padding: 6px 12px;
+      cursor: pointer;
+      border-radius: 4px;
+      font-size: 14px;
+    }
+    
+    .controls button:hover {
+      background-color: #45a049;
+    }
+    
+    .zoom-level {
+      font-size: 14px;
+      color: #666;
+      min-width: 50px;
+      text-align: center;
+    }
   </style>
   <script>
     class BpmnLiteParser {
@@ -1303,9 +1379,12 @@
         });
         
         // Add subgraphs for each lane
-        Object.entries(laneNodes).forEach(([laneName, taskIds]) => {
+        Object.entries(laneNodes).forEach(([laneName, taskIds], index) => {
           if (taskIds.length > 0) {
-            mermaid += `  subgraph ${laneName}[${laneName}]\n`;
+            // Use sg prefix to ensure valid subgraph names
+            const sgName = `sg${index}`;
+            const displayName = laneName.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+            mermaid += `  subgraph ${sgName}["${displayName}"]\n`;
             
             // Add nodes for each task in the lane
             taskIds.forEach(taskId => {
@@ -1345,10 +1424,11 @@
         
         // Add lane styles
         Object.keys(laneNodes).forEach((laneName, index) => {
+          const sgName = `sg${index}`;
           const color = index % 2 === 0 ? 
             'fill:#f9f9f9,stroke:#333,stroke-width:1px' : 
             'fill:#e6f3ff,stroke:#333,stroke-width:1px';
-          mermaid += `  style ${laneName} ${color}\n`;
+          mermaid += `  style ${sgName} ${color}\n`;
         });
         
         // Add connections
@@ -1516,6 +1596,18 @@
       </div>
       <div id="error-container" class="error"></div>
       <div id="diagram-preview" class="preview-content active">
+        <div class="controls" id="diagram-controls" style="display: none;">
+          <div class="export-menu" id="exportMenu">
+            <button onclick="toggleExportMenu()" title="Export Options">☰ Export</button>
+            <div class="export-dropdown">
+              <button onclick="exportPNG()" title="Export as PNG">📷 PNG Image</button>
+              <button onclick="exportSVG()" title="Export as SVG">🎨 SVG Vector</button>
+              <button onclick="exportMermaid()" title="Export as Mermaid">📊 Mermaid Code</button>
+              <button onclick="exportXLSX()" title="Export for Visio">📈 Excel (Visio)</button>
+              <button onclick="exportBPMN()" title="Export as BPMN">📋 BPMN XML</button>
+            </div>
+          </div>
+        </div>
         <div id="mermaid-preview" class="mermaid-preview"></div>
       </div>
       <div id="ast-preview" class="preview-content ast-preview"></div>
@@ -1743,6 +1835,12 @@
           
           // Hide error if successful
           errorContainer.style.display = 'none';
+          
+          // Show export controls
+          const controls = document.getElementById('diagram-controls');
+          if (controls) {
+            controls.style.display = 'flex';
+          }
         } catch (error) {
           errorContainer.textContent = `Error displaying Mermaid diagram: ${error.message || 'Unknown error'}`;
           errorContainer.style.display = 'block';
@@ -1776,6 +1874,144 @@
       parseDSL();
       renderDiagram();
     }, 100);
+    
+    // Export menu toggle
+    function toggleExportMenu() {
+      const menu = document.getElementById('exportMenu');
+      menu.classList.toggle('active');
+    }
+    
+    // Close dropdown when clicking outside
+    window.addEventListener('click', function(event) {
+      if (!event.target.matches('#exportMenu button')) {
+        const menu = document.getElementById('exportMenu');
+        if (menu && menu.classList.contains('active')) {
+          menu.classList.remove('active');
+        }
+      }
+    });
+    
+    // Export functions
+    function exportPNG() {
+      const svgElement = document.querySelector('#mermaid-preview svg');
+      if (!svgElement) {
+        alert('No diagram to export');
+        return;
+      }
+      
+      // For now, export as SVG with PNG extension
+      const svgData = new XMLSerializer().serializeToString(svgElement);
+      const svgBlob = new Blob([svgData], {type: 'image/svg+xml;charset=utf-8'});
+      const svgUrl = URL.createObjectURL(svgBlob);
+      const downloadLink = document.createElement('a');
+      downloadLink.href = svgUrl;
+      downloadLink.download = getProcessName(codeEditor.value) + '.svg';
+      document.body.appendChild(downloadLink);
+      downloadLink.click();
+      document.body.removeChild(downloadLink);
+    }
+    
+    function exportSVG() {
+      const svgElement = document.querySelector('#mermaid-preview svg');
+      if (!svgElement) {
+        alert('No diagram to export');
+        return;
+      }
+      
+      const svgData = new XMLSerializer().serializeToString(svgElement);
+      saveFile(svgData, getProcessName(codeEditor.value) + '.svg');
+    }
+    
+    function exportMermaid() {
+      if (!currentMermaid) {
+        alert('No Mermaid code to export');
+        return;
+      }
+      
+      saveFile(currentMermaid, getProcessName(codeEditor.value) + '.mmd');
+    }
+    
+    function exportXLSX() {
+      if (!currentAst) {
+        alert('No AST to export. Please parse the diagram first.');
+        return;
+      }
+      
+      const jsonContent = JSON.stringify(currentAst, null, 2);
+      saveFile(jsonContent, getProcessName(codeEditor.value) + '-ast.json');
+      alert('AST saved as JSON. Use the ast_to_visio.py tool to convert to XLSX format.');
+    }
+    
+    function exportBPMN() {
+      if (!currentAst) {
+        alert('No AST to export. Please parse the diagram first.');
+        return;
+      }
+      
+      const bpmnXml = astToBPMN(currentAst);
+      saveFile(bpmnXml, getProcessName(codeEditor.value) + '.bpmn');
+    }
+    
+    function astToBPMN(ast) {
+      // Basic BPMN 2.0 XML structure
+      let bpmn = `<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+                  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+                  xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+                  xmlns:camunda="http://camunda.org/schema/1.0/bpmn"
+                  id="Definitions_1" targetNamespace="http://bpmn.io/schema/bpmn">
+`;
+      
+      // Process each process in the AST
+      ast.processes?.forEach((process) => {
+        bpmn += `  <bpmn:process id="${process.id}" name="${process.name}" isExecutable="true">\n`;
+        
+        // Add lanes as swimlanes
+        process.lanes?.forEach((lane) => {
+          lane.elements?.forEach((element) => {
+            switch (element.type) {
+              case 'task':
+                bpmn += `    <bpmn:task id="${element.id}" name="${element.name}" />\n`;
+                break;
+              case 'event':
+                if (element.eventType === 'start') {
+                  bpmn += `    <bpmn:startEvent id="${element.id}" name="${element.name}" />\n`;
+                } else if (element.eventType === 'end') {
+                  bpmn += `    <bpmn:endEvent id="${element.id}" name="${element.name}" />\n`;
+                } else {
+                  bpmn += `    <bpmn:intermediateThrowEvent id="${element.id}" name="${element.name}" />\n`;
+                }
+                break;
+              case 'gateway':
+                bpmn += `    <bpmn:exclusiveGateway id="${element.id}" name="${element.name}" />\n`;
+                break;
+              case 'send':
+                bpmn += `    <bpmn:sendTask id="${element.id}" name="${element.name}" />\n`;
+                break;
+              case 'receive':
+                bpmn += `    <bpmn:receiveTask id="${element.id}" name="${element.name}" />\n`;
+                break;
+            }
+          });
+        });
+        
+        // Add sequence flows
+        ast.connections?.filter(c => c.type === 'sequenceFlow').forEach((conn) => {
+          bpmn += `    <bpmn:sequenceFlow id="${conn.id}" sourceRef="${conn.sourceRef}" targetRef="${conn.targetRef}" />\n`;
+        });
+        
+        bpmn += `  </bpmn:process>\n`;
+      });
+      
+      // Add message flows
+      ast.connections?.filter(c => c.type === 'messageFlow').forEach((conn) => {
+        bpmn += `  <bpmn:messageFlow id="${conn.id}" sourceRef="${conn.sourceRef}" targetRef="${conn.targetRef}" name="${conn.name || ''}" />\n`;
+      });
+      
+      bpmn += `</bpmn:definitions>`;
+      return bpmn;
+    }
     
     // Save buttons functionality
     const saveBplButton = document.getElementById('save-bpl');

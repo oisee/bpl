@@ -297,11 +297,67 @@ export class BpmnLitePreviewPanel {
                 .panning * {
                     cursor: grabbing !important;
                 }
+                
+                .export-menu {
+                    position: relative;
+                    display: inline-block;
+                }
+                
+                .export-dropdown {
+                    display: none;
+                    position: absolute;
+                    background-color: var(--vscode-dropdown-background);
+                    min-width: 180px;
+                    box-shadow: 0px 8px 16px 0px rgba(0,0,0,0.2);
+                    z-index: 1000;
+                    border: 1px solid var(--vscode-dropdown-border);
+                    border-radius: 2px;
+                    top: 100%;
+                    left: 0;
+                    margin-top: 2px;
+                }
+                
+                .export-dropdown button {
+                    width: 100%;
+                    text-align: left;
+                    padding: 8px 12px;
+                    border: none;
+                    border-radius: 0;
+                    background: var(--vscode-button-background);
+                    color: var(--vscode-button-foreground);
+                }
+                
+                .export-dropdown button:hover {
+                    background: var(--vscode-list-hoverBackground);
+                }
+                
+                .export-dropdown button:first-child {
+                    border-radius: 2px 2px 0 0;
+                }
+                
+                .export-dropdown button:last-child {
+                    border-radius: 0 0 2px 2px;
+                }
+                
+                .export-menu.active .export-dropdown {
+                    display: block;
+                }
             </style>
         </head>
         <body>
             ${mermaidCode ? `
             <div class="controls">
+                <div class="export-menu" id="exportMenu">
+                    <button onclick="toggleExportMenu()" title="Export Options">☰ Export</button>
+                    <div class="export-dropdown">
+                        <button onclick="exportPNG()" title="Export as PNG">📷 PNG Image</button>
+                        <button onclick="exportSVG()" title="Export as SVG">🎨 SVG Vector</button>
+                        <button onclick="exportMermaid()" title="Export as Mermaid">📊 Mermaid Code</button>
+                        <button onclick="exportXLSX()" title="Export for Visio">📈 Excel (Visio)</button>
+                        <button onclick="exportBPMN()" title="Export as BPMN">📋 BPMN XML</button>
+                    </div>
+                </div>
+                <span style="margin: 0 10px;">|</span>
                 <button onclick="panLeft()" title="Pan Left">←</button>
                 <button onclick="panRight()" title="Pan Right">→</button>
                 <button onclick="panUp()" title="Pan Up">↑</button>
@@ -311,12 +367,6 @@ export class BpmnLitePreviewPanel {
                 <button onclick="resetZoom()" title="Reset Zoom">Reset</button>
                 <button onclick="fitToWindow()" title="Fit to Window">Fit</button>
                 <span class="zoom-level" id="zoomLevel">100%</span>
-                <span style="margin: 0 10px;">|</span>
-                <button onclick="exportPNG()" title="Export as PNG">PNG</button>
-                <button onclick="exportSVG()" title="Export as SVG">SVG</button>
-                <button onclick="exportMermaid()" title="Export as Mermaid">Mermaid</button>
-                <button onclick="exportXLSX()" title="Export as XLSX (Visio)">XLSX</button>
-                <button onclick="exportBPMN()" title="Export as BPMN (Camunda)">BPMN</button>
             </div>
             ` : ''}
             <div id="diagram-container">
@@ -457,6 +507,22 @@ export class BpmnLitePreviewPanel {
                         useMaxWidth: true,
                         htmlLabels: true,
                         curve: 'basis'
+                    }
+                });
+                
+                // Toggle export menu
+                function toggleExportMenu() {
+                    const menu = document.getElementById('exportMenu');
+                    menu.classList.toggle('active');
+                }
+                
+                // Close dropdown when clicking outside
+                window.addEventListener('click', function(event) {
+                    if (!event.target.matches('#exportMenu button')) {
+                        const menu = document.getElementById('exportMenu');
+                        if (menu && menu.classList.contains('active')) {
+                            menu.classList.remove('active');
+                        }
                     }
                 });
                 

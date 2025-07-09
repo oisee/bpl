@@ -982,9 +982,12 @@ export class BpmnLiteParser {
             });
         });
         
-        Object.entries(laneNodes).forEach(([laneName, taskIds]) => {
+        Object.entries(laneNodes).forEach(([laneName, taskIds], index) => {
             if (taskIds.length > 0) {
-                mermaid += `  subgraph ${laneName}[${laneName}]\n`;
+                // Use sg prefix to ensure valid subgraph names
+                const sgName = `sg${index}`;
+                const displayName = laneName.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+                mermaid += `  subgraph ${sgName}["${displayName}"]\n`;
                 
                 taskIds.forEach(taskId => {
                     const task = this.tasks[taskId];
@@ -1019,10 +1022,11 @@ export class BpmnLiteParser {
         });
         
         Object.keys(laneNodes).forEach((laneName, index) => {
+            const sgName = `sg${index}`;
             const color = index % 2 === 0 ? 
                 'fill:#f9f9f9,stroke:#333,stroke-width:1px' : 
                 'fill:#e6f3ff,stroke:#333,stroke-width:1px';
-            mermaid += `  style ${laneName} ${color}\n`;
+            mermaid += `  style ${sgName} ${color}\n`;
         });
         
         mermaid += '\n';
