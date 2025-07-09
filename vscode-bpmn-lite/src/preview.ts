@@ -66,10 +66,28 @@ export class BpmnLitePreviewPanel {
 
         // Handle messages from the webview
         this._panel.webview.onDidReceiveMessage(
-            message => {
+            async message => {
                 switch (message.command) {
                     case 'alert':
                         vscode.window.showErrorMessage(message.text);
+                        return;
+                    case 'exportPNG':
+                        await this._exportPNG(message.svgData, message.dpi);
+                        return;
+                    case 'exportSVG':
+                        await this._exportSVG(message.svgData);
+                        return;
+                    case 'exportMermaid':
+                        await this._exportMermaid(message.mermaidCode);
+                        return;
+                    case 'exportXLSX':
+                        await this._exportXLSX(message.ast);
+                        return;
+                    case 'exportBPMN':
+                        await this._exportBPMN(message.ast);
+                        return;
+                    case 'getAST':
+                        this._sendAST();
                         return;
                 }
             },
@@ -125,7 +143,7 @@ export class BpmnLitePreviewPanel {
             );
             
             if (bplEditors.length === 0) {
-                webview.html = this._getHtmlForWebview(webview, '', 'No BPMN-Lite file is open');
+                webview.html = this._getHtmlForWebview(webview, '', 'No BPMN-Lite file is open', null);
                 return;
             }
             
@@ -134,36 +152,36 @@ export class BpmnLitePreviewPanel {
             try {
                 const parser = new BpmnLiteParser();
                 const content = fallbackEditor.document.getText();
-                parser.parse(content);
+                const ast = parser.parse(content);
                 const mermaid = parser.toMermaid();
                 
                 this._panel.title = `BPMN-Lite Preview - ${fallbackEditor.document.fileName.split('/').pop()}`;
-                webview.html = this._getHtmlForWebview(webview, mermaid, '');
+                webview.html = this._getHtmlForWebview(webview, mermaid, '', ast);
             } catch (error: any) {
-                webview.html = this._getHtmlForWebview(webview, '', error.message);
+                webview.html = this._getHtmlForWebview(webview, '', error.message, null);
             }
             return;
         }
 
         if (editor.document.languageId !== 'bpmn-lite') {
-            webview.html = this._getHtmlForWebview(webview, '', 'Active file is not a BPMN-Lite file');
+            webview.html = this._getHtmlForWebview(webview, '', 'Active file is not a BPMN-Lite file', null);
             return;
         }
 
         try {
             const parser = new BpmnLiteParser();
             const content = editor.document.getText();
-            parser.parse(content);
+            const ast = parser.parse(content);
             const mermaid = parser.toMermaid();
             
             this._panel.title = `BPMN-Lite Preview - ${editor.document.fileName.split('/').pop()}`;
-            webview.html = this._getHtmlForWebview(webview, mermaid, '');
+            webview.html = this._getHtmlForWebview(webview, mermaid, '', ast);
         } catch (error: any) {
-            webview.html = this._getHtmlForWebview(webview, '', error.message);
+            webview.html = this._getHtmlForWebview(webview, '', error.message, null);
         }
     }
 
-    private _getHtmlForWebview(webview: vscode.Webview, mermaidCode: string, error: string) {
+    private _getHtmlForWebview(webview: vscode.Webview, mermaidCode: string, error: string, ast: any) {
         const config = vscode.workspace.getConfiguration('bpmn-lite');
         const theme = config.get<string>('preview.theme', 'default');
 
@@ -293,6 +311,12 @@ export class BpmnLitePreviewPanel {
                 <button onclick="resetZoom()" title="Reset Zoom">Reset</button>
                 <button onclick="fitToWindow()" title="Fit to Window">Fit</button>
                 <span class="zoom-level" id="zoomLevel">100%</span>
+                <span style="margin: 0 10px;">|</span>
+                <button onclick="exportPNG()" title="Export as PNG">PNG</button>
+                <button onclick="exportSVG()" title="Export as SVG">SVG</button>
+                <button onclick="exportMermaid()" title="Export as Mermaid">Mermaid</button>
+                <button onclick="exportXLSX()" title="Export as XLSX (Visio)">XLSX</button>
+                <button onclick="exportBPMN()" title="Export as BPMN (Camunda)">BPMN</button>
             </div>
             ` : ''}
             <div id="diagram-container">
@@ -313,7 +337,10 @@ export class BpmnLitePreviewPanel {
                 let startY = 0;
                 let scrollLeft = 0;
                 let scrollTop = 0;
+                let currentAST = ${ast ? JSON.stringify(ast) : 'null'};
+                let currentMermaidCode = ${mermaidCode ? JSON.stringify(mermaidCode) : '""'};
                 
+                const vscode = acquireVsCodeApi();
                 const diagram = document.getElementById('diagram');
                 const container = document.getElementById('diagram-container');
                 const zoomLevelDisplay = document.getElementById('zoomLevel');
@@ -433,6 +460,64 @@ export class BpmnLitePreviewPanel {
                     }
                 });
                 
+                // Export functions
+                function exportPNG() {
+                    const svgElement = document.querySelector('.mermaid svg');
+                    if (!svgElement) {
+                        vscode.postMessage({ command: 'alert', text: 'No diagram to export' });
+                        return;
+                    }
+                    
+                    // Get user input for DPI
+                    const dpi = prompt('Enter DPI for PNG export (default: 300):', '300');
+                    if (!dpi) return;
+                    
+                    const svgData = new XMLSerializer().serializeToString(svgElement);
+                    vscode.postMessage({ 
+                        command: 'exportPNG', 
+                        svgData: svgData,
+                        dpi: parseInt(dpi) || 300
+                    });
+                }
+                
+                function exportSVG() {
+                    const svgElement = document.querySelector('.mermaid svg');
+                    if (!svgElement) {
+                        vscode.postMessage({ command: 'alert', text: 'No diagram to export' });
+                        return;
+                    }
+                    
+                    const svgData = new XMLSerializer().serializeToString(svgElement);
+                    vscode.postMessage({ command: 'exportSVG', svgData: svgData });
+                }
+                
+                function exportMermaid() {
+                    if (!currentMermaidCode) {
+                        vscode.postMessage({ command: 'alert', text: 'No Mermaid code to export' });
+                        return;
+                    }
+                    
+                    vscode.postMessage({ command: 'exportMermaid', mermaidCode: currentMermaidCode });
+                }
+                
+                function exportXLSX() {
+                    if (!currentAST) {
+                        vscode.postMessage({ command: 'alert', text: 'No AST to export' });
+                        return;
+                    }
+                    
+                    vscode.postMessage({ command: 'exportXLSX', ast: currentAST });
+                }
+                
+                function exportBPMN() {
+                    if (!currentAST) {
+                        vscode.postMessage({ command: 'alert', text: 'No AST to export' });
+                        return;
+                    }
+                    
+                    vscode.postMessage({ command: 'exportBPMN', ast: currentAST });
+                }
+                
                 // Fit to window after diagram renders
                 mermaid.init(undefined, document.querySelectorAll('.mermaid')).then(() => {
                     setTimeout(fitToWindow, 100);
@@ -458,6 +543,167 @@ export class BpmnLitePreviewPanel {
             .replace(/>/g, "&gt;")
             .replace(/"/g, "&quot;")
             .replace(/'/g, "&#039;");
+    }
+
+    private async _exportPNG(svgData: string, dpi: number) {
+        try {
+            const saveUri = await vscode.window.showSaveDialog({
+                defaultUri: vscode.Uri.file('diagram.png'),
+                filters: { 'PNG Image': ['png'] }
+            });
+            
+            if (!saveUri) return;
+            
+            // For now, we'll save the SVG and inform the user about PNG conversion
+            // In a real implementation, we'd use a library like sharp or canvas
+            vscode.window.showInformationMessage(
+                `PNG export requires additional libraries. SVG saved instead. You can convert it using online tools with ${dpi} DPI.`
+            );
+            
+            // Save as SVG for now
+            const svgContent = svgData;
+            await vscode.workspace.fs.writeFile(saveUri.with({ path: saveUri.path.replace('.png', '.svg') }), 
+                Buffer.from(svgContent, 'utf8'));
+        } catch (error: any) {
+            vscode.window.showErrorMessage(`Failed to export PNG: ${error.message}`);
+        }
+    }
+    
+    private async _exportSVG(svgData: string) {
+        try {
+            const saveUri = await vscode.window.showSaveDialog({
+                defaultUri: vscode.Uri.file('diagram.svg'),
+                filters: { 'SVG Image': ['svg'] }
+            });
+            
+            if (!saveUri) return;
+            
+            await vscode.workspace.fs.writeFile(saveUri, Buffer.from(svgData, 'utf8'));
+            vscode.window.showInformationMessage('SVG exported successfully!');
+        } catch (error: any) {
+            vscode.window.showErrorMessage(`Failed to export SVG: ${error.message}`);
+        }
+    }
+    
+    private async _exportMermaid(mermaidCode: string) {
+        try {
+            const saveUri = await vscode.window.showSaveDialog({
+                defaultUri: vscode.Uri.file('diagram.mmd'),
+                filters: { 'Mermaid Diagram': ['mmd', 'mermaid'] }
+            });
+            
+            if (!saveUri) return;
+            
+            await vscode.workspace.fs.writeFile(saveUri, Buffer.from(mermaidCode, 'utf8'));
+            vscode.window.showInformationMessage('Mermaid code exported successfully!');
+        } catch (error: any) {
+            vscode.window.showErrorMessage(`Failed to export Mermaid: ${error.message}`);
+        }
+    }
+    
+    private async _exportXLSX(ast: any) {
+        try {
+            const saveUri = await vscode.window.showSaveDialog({
+                defaultUri: vscode.Uri.file('diagram.xlsx'),
+                filters: { 'Excel Workbook': ['xlsx'] }
+            });
+            
+            if (!saveUri) return;
+            
+            // For now, save the AST as JSON and inform about conversion
+            const jsonUri = saveUri.with({ path: saveUri.path.replace('.xlsx', '-ast.json') });
+            await vscode.workspace.fs.writeFile(jsonUri, Buffer.from(JSON.stringify(ast, null, 2), 'utf8'));
+            
+            vscode.window.showInformationMessage(
+                'AST saved as JSON. Use the ast_to_visio.py tool to convert to XLSX format.'
+            );
+        } catch (error: any) {
+            vscode.window.showErrorMessage(`Failed to export XLSX: ${error.message}`);
+        }
+    }
+    
+    private async _exportBPMN(ast: any) {
+        try {
+            const saveUri = await vscode.window.showSaveDialog({
+                defaultUri: vscode.Uri.file('diagram.bpmn'),
+                filters: { 'BPMN 2.0': ['bpmn', 'xml'] }
+            });
+            
+            if (!saveUri) return;
+            
+            // Convert AST to BPMN XML
+            const bpmnXml = this._astToBPMN(ast);
+            await vscode.workspace.fs.writeFile(saveUri, Buffer.from(bpmnXml, 'utf8'));
+            vscode.window.showInformationMessage('BPMN file exported successfully!');
+        } catch (error: any) {
+            vscode.window.showErrorMessage(`Failed to export BPMN: ${error.message}`);
+        }
+    }
+    
+    private _astToBPMN(ast: any): string {
+        // Basic BPMN 2.0 XML structure
+        let bpmn = `<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+                  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+                  xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+                  xmlns:camunda="http://camunda.org/schema/1.0/bpmn"
+                  id="Definitions_1" targetNamespace="http://bpmn.io/schema/bpmn">
+`;
+        
+        // Process each process in the AST
+        ast.processes?.forEach((process: any) => {
+            bpmn += `  <bpmn:process id="${process.id}" name="${process.name}" isExecutable="true">\n`;
+            
+            // Add lanes as swimlanes
+            process.lanes?.forEach((lane: any) => {
+                lane.elements?.forEach((element: any) => {
+                    switch (element.type) {
+                        case 'task':
+                            bpmn += `    <bpmn:task id="${element.id}" name="${element.name}" />\n`;
+                            break;
+                        case 'event':
+                            if (element.eventType === 'start') {
+                                bpmn += `    <bpmn:startEvent id="${element.id}" name="${element.name}" />\n`;
+                            } else if (element.eventType === 'end') {
+                                bpmn += `    <bpmn:endEvent id="${element.id}" name="${element.name}" />\n`;
+                            } else {
+                                bpmn += `    <bpmn:intermediateThrowEvent id="${element.id}" name="${element.name}" />\n`;
+                            }
+                            break;
+                        case 'gateway':
+                            bpmn += `    <bpmn:exclusiveGateway id="${element.id}" name="${element.name}" />\n`;
+                            break;
+                        case 'send':
+                            bpmn += `    <bpmn:sendTask id="${element.id}" name="${element.name}" />\n`;
+                            break;
+                        case 'receive':
+                            bpmn += `    <bpmn:receiveTask id="${element.id}" name="${element.name}" />\n`;
+                            break;
+                    }
+                });
+            });
+            
+            // Add sequence flows
+            ast.connections?.filter((c: any) => c.type === 'sequenceFlow').forEach((conn: any) => {
+                bpmn += `    <bpmn:sequenceFlow id="${conn.id}" sourceRef="${conn.sourceRef}" targetRef="${conn.targetRef}" />\n`;
+            });
+            
+            bpmn += `  </bpmn:process>\n`;
+        });
+        
+        // Add message flows
+        ast.connections?.filter((c: any) => c.type === 'messageFlow').forEach((conn: any) => {
+            bpmn += `  <bpmn:messageFlow id="${conn.id}" sourceRef="${conn.sourceRef}" targetRef="${conn.targetRef}" name="${conn.name || ''}" />\n`;
+        });
+        
+        bpmn += `</bpmn:definitions>`;
+        return bpmn;
+    }
+    
+    private _sendAST() {
+        // This method would send the current AST back to the webview if needed
+        // Currently not used but could be useful for future enhancements
     }
 
     public dispose() {

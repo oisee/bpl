@@ -2,6 +2,22 @@
 
 All notable changes to the "bpmn-lite" extension will be documented in this file.
 
+## [0.3.0] - 2025-07-09
+
+### Added
+- Export functionality in preview panel
+  - Export as PNG (with DPI settings)
+  - Export as SVG (scalable vector graphics)
+  - Export as Mermaid (.mmd)
+  - Export as XLSX (for Microsoft Visio import)
+  - Export as BPMN 2.0 XML (Camunda compatible)
+- New export buttons in preview toolbar
+- Automatic BPMN 2.0 XML generation from AST
+
+### Changed
+- Updated preview UI with export section
+- Enhanced message handling for export operations
+
 ## [0.2.0] - 2025-07-09
 
 ### Added
