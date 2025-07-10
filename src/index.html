@@ -1209,96 +1209,75 @@
       }
       
       connectEvents() {
-        // Process each lane to connect start/end events properly
-        Object.values(this.lanes).forEach(lane => {
-          // Find start events
-          const startEvents = lane.tasks.filter(taskId => {
+        // Handle process-level Start event connection
+        const processStart = this.tasks['process_start'];
+        if (processStart) {
+          // Find the first task in the entire process
+          const firstTask = this.findFirstTaskInProcess();
+          if (firstTask) {
+            // Check if connection already exists
+            const connectionExists = this.connections.some(conn => 
+              conn.type === 'sequenceFlow' && 
+              conn.sourceRef === 'process_start' && 
+              conn.targetRef === firstTask
+            );
+            
+            if (!connectionExists) {
+              this.addConnection('flow', 'process_start', firstTask);
+            }
+          }
+        }
+        
+        // Handle process-level End event connections (already handled by gateway branches and lane connections)
+        // Process-level End events are connected by:
+        // 1. Gateway branches that end with +!End or -!End
+        // 2. Last tasks in lanes that have !End events
+        const processEnd = this.tasks['process_end'];
+        if (processEnd) {
+          // Find tasks that should connect to the process end but aren't already connected
+          Object.values(this.tasks).forEach(task => {
+            if (task.type === 'task' && task.lane) {
+              // Check if this task appears to be a final task in its lane
+              const lane = this.lanes[`@${task.lane}`];
+              if (lane && lane.tasks.length > 0) {
+                const lastTaskInLane = lane.tasks[lane.tasks.length - 1];
+                // If this is the last task in its lane and there's no outgoing connection
+                if (lastTaskInLane === task.id) {
+                  const hasOutgoingConnection = this.connections.some(conn => 
+                    conn.sourceRef === task.id
+                  );
+                  
+                  if (!hasOutgoingConnection) {
+                    // Check for connection breaks
+                    const hasBreak = this.hasConnectionBreakBetween(
+                      this.taskLineNumbers[task.id],
+                      this.taskLineNumbers['process_end'] || 999999
+                    );
+                    
+                    if (!hasBreak) {
+                      this.addConnection('flow', task.id, 'process_end');
+                    }
+                  }
+                }
+              }
+            }
+          });
+        }
+      }
+      
+      findFirstTaskInProcess() {
+        // Find the very first task that appears in the process
+        // This should be the first non-event task in the first lane that contains tasks
+        for (const [laneName, lane] of Object.entries(this.lanes)) {
+          for (const taskId of lane.tasks) {
             const task = this.tasks[taskId];
-            return task && task.type === 'event' && task.eventType === 'start';
-          });
-          
-          // Find end events
-          const endEvents = lane.tasks.filter(taskId => {
-            const task = this.tasks[taskId];
-            return task && task.type === 'event' && task.eventType === 'end';
-          });
-          
-          // Connect start events to first non-event task
-          startEvents.forEach(startEventId => {
-            // Find the first regular task after the start event
-            let firstTaskAfterStart = null;
-            let startEventIndex = lane.tasks.indexOf(startEventId);
-            
-            for (let i = startEventIndex + 1; i < lane.tasks.length; i++) {
-              const taskId = lane.tasks[i];
-              const task = this.tasks[taskId];
-              
-              // Skip other events
-              if (task && task.type !== 'event' && task.type !== 'branch') {
-                firstTaskAfterStart = taskId;
-                break;
-              }
+            // Return the first non-event, non-branch task
+            if (task && task.type !== 'event' && task.type !== 'branch') {
+              return taskId;
             }
-            
-            // If found, connect them
-            if (firstTaskAfterStart) {
-              // Check if connection already exists
-              const connectionExists = this.connections.some(conn => 
-                conn.type === 'sequenceFlow' && 
-                conn.sourceRef === startEventId && 
-                conn.targetRef === firstTaskAfterStart
-              );
-              
-              // Check if there's a connection break between these tasks
-              const hasBreak = this.hasConnectionBreakBetween(
-                this.taskLineNumbers[startEventId],
-                this.taskLineNumbers[firstTaskAfterStart]
-              );
-              
-              if (!connectionExists && !hasBreak) {
-                this.addConnection('flow', startEventId, firstTaskAfterStart);
-              }
-            }
-          });
-          
-          // Connect last non-event task to end events
-          endEvents.forEach(endEventId => {
-            // Find the last regular task before the end event
-            let lastTaskBeforeEnd = null;
-            let endEventIndex = lane.tasks.indexOf(endEventId);
-            
-            for (let i = endEventIndex - 1; i >= 0; i--) {
-              const taskId = lane.tasks[i];
-              const task = this.tasks[taskId];
-              
-              // Skip other events
-              if (task && task.type !== 'event' && task.type !== 'branch') {
-                lastTaskBeforeEnd = taskId;
-                break;
-              }
-            }
-            
-            // If found, connect them
-            if (lastTaskBeforeEnd) {
-              // Check if connection already exists
-              const connectionExists = this.connections.some(conn => 
-                conn.type === 'sequenceFlow' && 
-                conn.sourceRef === lastTaskBeforeEnd && 
-                conn.targetRef === endEventId
-              );
-              
-              // Check if there's a connection break between these tasks
-              const hasBreak = this.hasConnectionBreakBetween(
-                this.taskLineNumbers[lastTaskBeforeEnd],
-                this.taskLineNumbers[endEventId]
-              );
-              
-              if (!connectionExists && !hasBreak) {
-                this.addConnection('flow', lastTaskBeforeEnd, endEventId);
-              }
-            }
-          });
-        });
+          }
+        }
+        return null;
       }
 
       resolveTaskId(taskRef) {
