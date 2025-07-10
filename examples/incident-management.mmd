@@ -7,10 +7,11 @@ flowchart TD
   classDef comment fill:#ffd,stroke:#bb0,stroke-width:1px
   classDef dataObject fill:#ececff,stroke:#9370db,stroke-width:1px
   classDef branch fill:#d5ffd5,stroke:#3cb371,stroke-width:1px
+  process_start([Start]):::event
+  process_end([End]):::event
   data_incidentdata[(IncidentData)]:::dataObject
   data_resolutiondata[(ResolutionData)]:::dataObject
   subgraph sg0["End User"]
-    end_user_start([Start]):::event
     end_user_experience_issue[experience issue]:::task
     end_user_send_incident_report>send: Incident Report]:::message
     end_user_receive_ticket_number>receive: Ticket Number]:::message
@@ -18,7 +19,6 @@ flowchart TD
     end_user_issue_resolved{Issue Resolved?}:::gateway
     end_user_confirm_resolution["confirm resolution"]:::branch
     end_user_rate_service["rate service"]:::branch
-    end_user_end["!End"]:::branch
     end_user_provide_more_info["provide more info"]:::branch
     end_user_send_additional_details["send: Additional Details"]:::branch
   end
@@ -86,7 +86,7 @@ flowchart TD
   style sg5 fill:#e6f3ff,stroke:#333,stroke-width:1px
 
   %% Sequence flows
-  end_user_start --> end_user_experience_issue
+  end_user_issue_resolved -->|Yes| process_end
   end_user_experience_issue --> end_user_send_incident_report
   end_user_send_incident_report --> end_user_receive_ticket_number
   end_user_receive_ticket_number --> end_user_receive_status_update
@@ -113,7 +113,6 @@ flowchart TD
   monitoring_system_detect_anomaly --> monitoring_system_critical_alert
   end_user_issue_resolved -->|Yes| end_user_confirm_resolution
   end_user_issue_resolved -->|Yes| end_user_rate_service
-  end_user_issue_resolved -->|Yes| end_user_end
   end_user_issue_resolved -->|No| end_user_provide_more_info
   end_user_issue_resolved -->|No| end_user_send_additional_details
   service_desk_severity_level -->|Critical| service_desk_critical_escalate_immediately
@@ -144,15 +143,12 @@ flowchart TD
   monitoring_system_critical_alert -->|Yes| monitoring_system_page_on_call
   monitoring_system_critical_alert -->|No| monitoring_system_log_warning
   monitoring_system_critical_alert -->|No| monitoring_system_update_dashboard
-  end_user_issue_resolved --> service_desk_receive_incident_report
   service_desk_close_ticket --> l1_support_receive_incident
   l1_support_can_resolve --> l2_support_receive_escalation
   l2_support_send_resolution_details --> l3_support_receive_critical_escalation
   l3_support_send_resolution_details --> monitoring_system_detect_anomaly
+  process_start --> end_user_experience_issue
   %% Message flows
-  end_user_send_incident_report -.->|Incident Report| service_desk_receive_incident_report
-  service_desk_send_ticket_number -.->|Ticket Number| end_user_receive_ticket_number
-  service_desk_send_status_update -.->|Status Update| end_user_receive_status_update
   l2_support_send_resolution_details -.->|Resolution Details| service_desk_receive_resolution_details
   l3_support_send_resolution_details -.->|Resolution Details| service_desk_receive_resolution_details
   %% Data flows

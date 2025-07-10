@@ -877,7 +877,7 @@ export class BpmnLiteParser {
         if (processEnd) {
             // Find tasks that should connect to the process end but aren't already connected
             Object.values(this.tasks).forEach(task => {
-                if (task.type === 'task' && task.lane) {
+                if ((task.type === 'task' || task.type === 'send' || task.type === 'receive') && task.lane) {
                     // Check if this task appears to be a final task in its lane
                     const lane = this.lanes[`@${task.lane}`];
                     if (lane && lane.tasks.length > 0) {
@@ -889,15 +889,9 @@ export class BpmnLiteParser {
                             );
                             
                             if (!hasOutgoingConnection) {
-                                // Check for connection breaks
-                                const hasBreak = this.hasConnectionBreakBetween(
-                                    this.taskLineNumbers[task.id],
-                                    this.taskLineNumbers['process_end'] || 999999
-                                );
-                                
-                                if (!hasBreak) {
-                                    this.addConnection('flow', task.id, 'process_end');
-                                }
+                                // Don't check for connection breaks when connecting to process-level End event
+                                // The breaks are meant to prevent OTHER cross-lane connections, not End event connections
+                                this.addConnection('flow', task.id, 'process_end');
                             }
                         }
                     }

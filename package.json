@@ -1,6 +1,6 @@
 {
   "name": "bpmn-lite-dsl-editor",
-  "version": "0.4.2",
+  "version": "0.4.3",
   "description": "A minimal, intuitive domain-specific language for describing business process diagrams",
   "main": "main.js",
   "scripts": {

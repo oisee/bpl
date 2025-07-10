@@ -7,11 +7,12 @@ flowchart TD
   classDef comment fill:#ffd,stroke:#bb0,stroke-width:1px
   classDef dataObject fill:#ececff,stroke:#9370db,stroke-width:1px
   classDef branch fill:#d5ffd5,stroke:#3cb371,stroke-width:1px
+  process_start([Start]):::event
+  process_end([End]):::event
   data_employeedata[(EmployeeData)]:::dataObject
   data_documentdata[(DocumentData)]:::dataObject
   data_itrequestdata[(ITRequestData)]:::dataObject
   subgraph sg0["HR Department"]
-    hr_department_start([Start]):::event
     hr_department_receive_job_acceptance[receive job acceptance]:::task
     hr_department_create_employee_record[create employee record]:::task
     hr_department_send_welcome_email>send: Welcome Email]:::message
@@ -30,7 +31,6 @@ flowchart TD
     hr_department_send_orientation_invite>send: Orientation Invite]:::message
     hr_department_conduct_orientation[conduct orientation]:::task
     hr_department_complete_onboarding[complete onboarding]:::task
-    hr_department_end([End]):::event
   end
   subgraph sg1["New Employee"]
     new_employee_send_job_acceptance[send job acceptance]:::task
@@ -81,7 +81,6 @@ flowchart TD
   style sg4 fill:#f9f9f9,stroke:#333,stroke-width:1px
 
   %% Sequence flows
-  hr_department_start --> hr_department_receive_job_acceptance
   hr_department_receive_job_acceptance --> hr_department_create_employee_record
   hr_department_create_employee_record --> hr_department_send_welcome_email
   hr_department_send_welcome_email --> hr_department_send_onboarding_schedule
@@ -94,7 +93,6 @@ flowchart TD
   hr_department_schedule_orientation --> hr_department_send_orientation_invite
   hr_department_send_orientation_invite --> hr_department_conduct_orientation
   hr_department_conduct_orientation --> hr_department_complete_onboarding
-  hr_department_complete_onboarding --> hr_department_end
   new_employee_send_job_acceptance --> new_employee_receive_welcome_email
   new_employee_receive_welcome_email --> new_employee_receive_onboarding_schedule
   new_employee_receive_onboarding_schedule --> new_employee_receive_document_request
@@ -135,16 +133,13 @@ flowchart TD
   it_department_equipment_ready -->|No| it_department_wait_for_delivery
   it_department_install_software --> it_department_setup_workstation
   it_department_send_account_credentials --> it_department_setup_workstation
-  hr_department_end --> new_employee_send_job_acceptance
   new_employee_complete_training --> it_department_receive_it_request
   it_department_setup_workstation --> facilities_receive_facilities_request
   facilities_send_workspace_assignment --> payroll_receive_employee_data
+  process_start --> hr_department_receive_job_acceptance
+  hr_department_complete_onboarding --> process_end
+  payroll_process_first_payment --> process_end
   %% Message flows
-  hr_department_send_welcome_email -.->|Welcome Email| new_employee_receive_welcome_email
-  hr_department_send_onboarding_schedule -.->|Onboarding Schedule| new_employee_receive_onboarding_schedule
-  hr_department_send_document_request -.->|Document Request| new_employee_receive_document_request
-  hr_department_send_orientation_invite -.->|Orientation Invite| new_employee_receive_orientation_invite
-  new_employee_send_completed_documents -.->|Completed Documents| hr_department_receive_completed_documents
   facilities_send_workspace_assignment -.->|Workspace Assignment| new_employee_receive_workspace_assignment
   %% Data flows
   data_documentdata -.-> new_employee_send_completed_documents

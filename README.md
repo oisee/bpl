@@ -3,7 +3,7 @@
 A revolutionary way to create business process diagrams - write in plain text, see beautiful diagrams instantly! 🚀
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Version-0.4.2-blue.svg" alt="Version">
+  <img src="https://img.shields.io/badge/Version-0.4.3-blue.svg" alt="Version">
   <img src="https://img.shields.io/badge/License-MIT-green.svg" alt="License">
   <img src="https://img.shields.io/badge/PRs-Welcome-brightgreen.svg" alt="PRs Welcome">
 </p>

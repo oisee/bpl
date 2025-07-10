@@ -7,11 +7,12 @@ flowchart TD
   classDef comment fill:#ffd,stroke:#bb0,stroke-width:1px
   classDef dataObject fill:#ececff,stroke:#9370db,stroke-width:1px
   classDef branch fill:#d5ffd5,stroke:#3cb371,stroke-width:1px
+  process_start([Start]):::event
+  process_end([End]):::event
   data_applicationdata[(ApplicationData)]:::dataObject
   data_creditdata[(CreditData)]:::dataObject
   data_agreementdata[(AgreementData)]:::dataObject
   subgraph sg0["Customer"]
-    customer_start([Start]):::event
     customer_apply_for_loan[apply for loan]:::task
     customer_send_loan_application>send: Loan Application]:::message
     customer_send_financial_documents>send: Financial Documents]:::message
@@ -22,9 +23,7 @@ flowchart TD
     customer_sign_agreement["sign agreement"]:::branch
     customer_send_signed_agreement["send: Signed Agreement"]:::branch
     customer_receive_loan_disbursement["receive: Loan Disbursement"]:::branch
-    customer_end["!End"]:::branch
     customer_receive_rejection_reason["receive: Rejection Reason"]:::branch
-    customer_end["!End"]:::branch
   end
   subgraph sg1["Loan Officer"]
     loan_officer_receive_loan_application>receive: Loan Application]:::message
@@ -86,7 +85,8 @@ flowchart TD
   style sg5 fill:#e6f3ff,stroke:#333,stroke-width:1px
 
   %% Sequence flows
-  customer_start --> customer_apply_for_loan
+  customer_loan_approved -->|Yes| process_end
+  customer_loan_approved -->|No| process_end
   customer_apply_for_loan --> customer_send_loan_application
   customer_send_loan_application --> customer_send_financial_documents
   customer_send_financial_documents --> customer_receive_document_request
@@ -119,9 +119,7 @@ flowchart TD
   customer_loan_approved -->|Yes| customer_sign_agreement
   customer_loan_approved -->|Yes| customer_send_signed_agreement
   customer_loan_approved -->|Yes| customer_receive_loan_disbursement
-  customer_loan_approved -->|No| customer_end
   customer_loan_approved -->|No| customer_receive_rejection_reason
-  customer_loan_approved -->|No| customer_end
   loan_officer_application_complete -->|Yes| loan_officer_verify_identity
   loan_officer_application_complete -->|Yes| loan_officer_send_credit_check_request
   loan_officer_application_complete -->|No| loan_officer_send_document_request
@@ -138,13 +136,13 @@ flowchart TD
   underwriting_meets_criteria -->|Reject| underwriting_reject_reject_application
   underwriting_meets_criteria -->|No| underwriting_document_reasons
   underwriting_meets_criteria -->|No| underwriting_send_final_rejection
-  customer_loan_approved --> loan_officer_receive_loan_application
   loan_officer_risk_acceptable --> credit_bureau_receive_credit_check_request
   credit_bureau_send_credit_report --> underwriting_receive_approval_request
   underwriting_meets_criteria --> legal_department_receive_approved_loan
   legal_department_finalize_contract --> finance_department_receive_disbursement_request
+  process_start --> customer_apply_for_loan
+  finance_department_update_accounting --> process_end
   %% Message flows
-  customer_send_loan_application -.->|Loan Application| loan_officer_receive_loan_application
   credit_bureau_send_credit_report -.->|Credit Report| loan_officer_receive_credit_report
   %% Data flows
   data_applicationdata -.-> loan_officer_receive_loan_application
