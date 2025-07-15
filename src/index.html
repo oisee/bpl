@@ -306,8 +306,19 @@
                 continue;
               }
               
-              // Process this part (pass line number)
-              const taskId = this.processLinePart(part, part.charAt(0), i);
+              // Check if this part needs special handling for cross-lane references
+              let taskId = null;
+              
+              // If we have a previous operator and this might be a reference to another task
+              if (prevOperator && !this.isSpecialLine(part)) {
+                // Try to resolve it as a task reference first
+                taskId = this.resolveTaskId(part, true); // Create if not found
+              }
+              
+              // If not resolved as reference, process normally
+              if (!taskId) {
+                taskId = this.processLinePart(part, part.charAt(0), i);
+              }
               
               // Create connection if we have a previous task and operator
               if (prevTaskId && taskId && prevOperator) {
@@ -760,8 +771,8 @@
               console.log(`Complex format - Message: "${messageName}", Source: "${sourceRef}", Target: "${targetPart}"`);
               
               // Resolve source and target
-              const sourceId = this.resolveTaskId(sourceRef);
-              const targetId = this.resolveTaskId(targetPart);
+              const sourceId = this.resolveTaskId(sourceRef, false);
+              const targetId = this.resolveTaskId(targetPart, false);
               
               if (sourceId && targetId) {
                 // Create the message object
@@ -804,7 +815,7 @@
               
               // Try to find a source (probably the last task)
               const sourceId = this.lastTask;
-              const targetId = this.resolveTaskId(targetPart);
+              const targetId = this.resolveTaskId(targetPart, false);
               
               if (sourceId && targetId) {
                 // Create the message object
@@ -857,7 +868,7 @@
           
           // If task reference can be resolved, create a connection
           if (taskRef) {
-            const taskId = this.resolveTaskId(taskRef);
+            const taskId = this.resolveTaskId(taskRef, false);
             if (taskId) {
               // Create a data association
               this.addConnection('data', dataObjId, taskId);
@@ -1273,48 +1284,43 @@
         return null;
       }
 
-      resolveTaskId(taskRef) {
+      resolveTaskId(taskRef, createIfNotFound = false) {
         if (!taskRef) return null;
         
         taskRef = taskRef.trim();
         console.log(`Resolving task ID for: "${taskRef}"`);
         
-        // First try direct lookup
+        // 1. Check direct scope lookup
         if (this.taskScope[taskRef]) {
           console.log(`  Direct lookup success: ${this.taskScope[taskRef]}`);
           return this.taskScope[taskRef];
         }
         
-        // Try to normalize
         const normalized = this.normalizeId(taskRef);
         if (this.taskScope[normalized]) {
           console.log(`  Normalized lookup success: ${this.taskScope[normalized]}`);
           return this.taskScope[normalized];
         }
         
-        // If the reference includes a lane (has '@Lane.task' format)
+        // 2. Check if it's a fully qualified reference (lane.task)
         if (taskRef.includes('.')) {
           const parts = taskRef.split('.');
           
           if (parts.length === 2) {
             let [lane, task] = parts;
             
-            // Remove @ prefix if present
             if (lane.startsWith('@')) {
               lane = lane.substring(1);
             }
             
-            // Normalize task name
             const normalizedTask = this.normalizeId(task);
             
-            // Try various combinations
             const lookups = [
               `${lane}.${normalizedTask}`,
               `@${lane}.${normalizedTask}`,
               `${lane}_${normalizedTask}`
             ];
             
-            // Also try with lane name variations (lowercase, normalized)
             const normalizedLane = this.normalizeId(lane);
             lookups.push(
               `${normalizedLane}.${normalizedTask}`,
@@ -1322,7 +1328,6 @@
               `${normalizedLane}_${normalizedTask}`
             );
             
-            // Try each lookup
             for (const lookup of lookups) {
               if (this.taskScope[lookup]) {
                 console.log(`  Complex lookup success: ${this.taskScope[lookup]} (via ${lookup})`);
@@ -1330,44 +1335,104 @@
               }
             }
             
-            // Try direct lookup of the combined ID format (lane_task)
-            const directId = `${lane}_${normalizedTask}`;
+            const directId = `${normalizedLane}_${normalizedTask}`;
             if (this.tasks[directId]) {
               console.log(`  Direct ID lookup success: ${directId}`);
               return directId;
             }
-            
-            // Try all tasks to find a matching name in the given lane
-            const laneTasks = Object.values(this.tasks).filter(t => 
-              t.lane && t.lane.toLowerCase() === lane.toLowerCase()
-            );
-            
-            // Find a task with a matching name in this lane
-            const matchingTask = laneTasks.find(t => 
-              this.normalizeId(t.name) === normalizedTask || 
-              (t.messageName && this.normalizeId(t.messageName) === normalizedTask)
-            );
-            
-            if (matchingTask) {
-              console.log(`  Lane tasks search success: ${matchingTask.id}`);
-              return matchingTask.id;
-            }
           }
-        } else {
-          // If no lane specified, search all tasks for a name match
-          const matchingTask = Object.values(this.tasks).find(t => 
-            this.normalizeId(t.name) === normalized || 
-            (t.messageName && this.normalizeId(t.messageName) === normalized)
-          );
-          
-          if (matchingTask) {
-            console.log(`  Global name search success: ${matchingTask.id}`);
-            return matchingTask.id;
+        }
+        
+        // 3. Search across all lanes in order
+        const allLaneNames = Object.keys(this.lanes);
+        const currentLaneIndex = this.currentLane ? allLaneNames.indexOf(this.currentLane) : -1;
+        
+        // 3a. First search in current lane
+        if (this.currentLane) {
+          const currentLaneName = this.currentLane.replace('@', '');
+          const taskInCurrentLane = this.findTaskInLane(currentLaneName, normalized);
+          if (taskInCurrentLane) {
+            console.log(`  Found in current lane: ${taskInCurrentLane.id}`);
+            return taskInCurrentLane.id;
           }
+        }
+        
+        // 3b. Search in previous lanes (going up)
+        for (let i = currentLaneIndex - 1; i >= 0; i--) {
+          const laneName = allLaneNames[i].replace('@', '');
+          const task = this.findTaskInLane(laneName, normalized);
+          if (task) {
+            console.log(`  Found in previous lane ${laneName}: ${task.id}`);
+            return task.id;
+          }
+        }
+        
+        // 3c. Search in subsequent lanes (going down)
+        for (let i = currentLaneIndex + 1; i < allLaneNames.length; i++) {
+          const laneName = allLaneNames[i].replace('@', '');
+          const task = this.findTaskInLane(laneName, normalized);
+          if (task) {
+            console.log(`  Found in subsequent lane ${laneName}: ${task.id}`);
+            return task.id;
+          }
+        }
+        
+        // 4. If not found and createIfNotFound is true, create implicit task
+        if (createIfNotFound && this.currentLane) {
+          const implicitTaskId = this.createImplicitTask(taskRef);
+          console.log(`  Created implicit task: ${implicitTaskId}`);
+          return implicitTaskId;
         }
         
         console.log(`  Resolution failed for: "${taskRef}"`);
         return null;
+      }
+      
+      findTaskInLane(laneName, normalizedTaskName) {
+        const laneTasks = Object.values(this.tasks).filter(t => 
+          t.lane && t.lane.toLowerCase() === laneName.toLowerCase()
+        );
+        
+        return laneTasks.find(t => 
+          this.normalizeId(t.name) === normalizedTaskName || 
+          (t.messageName && this.normalizeId(t.messageName) === normalizedTaskName)
+        );
+      }
+      
+      createImplicitTask(taskName) {
+        if (!this.currentLane) {
+          this.parseLane('@Default');
+        }
+        
+        const laneName = this.currentLane.replace('@', '');
+        const normalizedLaneName = this.normalizeId(laneName);
+        const taskId = `${normalizedLaneName}_${this.normalizeId(taskName)}`;
+        
+        // Create the implicit task
+        this.tasks[taskId] = {
+          type: 'task',
+          name: taskName,
+          id: taskId,
+          lane: laneName,
+          implicit: true // Mark as implicitly created
+        };
+        
+        // Add to lane tasks
+        this.lanes[this.currentLane].tasks.push(taskId);
+        
+        // Add to scope
+        const simpleName = this.normalizeId(taskName);
+        this.taskScope[simpleName] = taskId;
+        this.taskScope[`${laneName}.${simpleName}`] = taskId;
+        this.taskScope[`@${laneName}.${simpleName}`] = taskId;
+        
+        return taskId;
+      }
+      
+      isSpecialLine(line) {
+        if (!line || !line.trim()) return true;
+        const firstChar = line.trim().charAt(0);
+        return [':', '@', '^', '#', '?', '+', '-', '"', '!', '/'].includes(firstChar);
       }
 
       normalizeId(name) {
