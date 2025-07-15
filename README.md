@@ -3,7 +3,7 @@
 A revolutionary way to create business process diagrams - write in plain text, see beautiful diagrams instantly! 🚀
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Version-0.4.3-blue.svg" alt="Version">
+  <img src="https://img.shields.io/badge/Version-0.4.27-blue.svg" alt="Version">
   <img src="https://img.shields.io/badge/License-MIT-green.svg" alt="License">
   <img src="https://img.shields.io/badge/PRs-Welcome-brightgreen.svg" alt="PRs Welcome">
 </p>
@@ -1292,13 +1292,126 @@ git commit -m 'Add amazing feature'
 git push origin feature/amazing-feature
 ```
 
+## 📚 Theoretical Foundation & References
+
+### Domain-Driven Design (DDD) Principles
+
+BPMN-Lite is built on Domain-Driven Design principles:
+
+- **Ubiquitous Language**: The DSL syntax mirrors business vocabulary
+- **Bounded Contexts**: Each lane/pool represents a distinct context
+- **Domain Events**: Message flows (`send:`/`receive:`) model domain events
+- **Aggregates**: Process definitions encapsulate related activities
+
+### Academic References
+
+1. **Business Process Modeling**
+   - van der Aalst, W.M.P. (2013). "Business Process Management: A Comprehensive Survey"
+   - Dumas, M., La Rosa, M., Mendling, J., & Reijers, H. (2018). "Fundamentals of Business Process Management"
+
+2. **Domain-Specific Languages**
+   - Fowler, M. (2010). "Domain-Specific Languages". Addison-Wesley
+   - Mernik, M., Heering, J., & Sloane, A. M. (2005). "When and how to develop domain-specific languages"
+
+3. **Visual Languages & Diagrams**
+   - Moody, D. (2009). "The Physics of Notations: Toward a Scientific Basis for Constructing Visual Notations in Software Engineering"
+
+### Internal Documentation & Articles
+
+- **[Architecture Decision Records](GEMINI.md)** - Key architectural decisions and rationale
+- **[Camunda Integration Proposal](CAMUNDA-PROPOSAL.md)** - Vision for enterprise BPMN platform integration
+- **[Development Guide](GUIDE.md)** - Comprehensive guide for contributors
+- **[Implementation Plan](implementation_plan.md)** - Technical roadmap and design patterns
+- **[Improvements Plan](improvements_plan.md)** - Future enhancements and optimizations
+- **[Testing Documentation](vscode-bpmn-lite/TESTING.md)** - Test strategies and scenarios
+
+### Design Philosophy
+
+BPMN-Lite follows these core principles:
+
+1. **Simplicity First**: Minimal syntax for maximum expressiveness
+2. **Progressive Disclosure**: Advanced features available when needed
+3. **Fail-Safe Defaults**: Smart conventions reduce errors
+4. **Human-Centric**: Optimized for readability and writability
+
+### Related Technologies
+
+- **BPMN 2.0**: OMG specification we compile to
+- **Mermaid.js**: Rendering engine for diagrams
+- **Language Server Protocol**: Future IDE integration
+- **WebAssembly**: Potential for browser-based parser
+
+## 🔗 External Resources
+
+### Standards & Specifications
+- [BPMN 2.0 Specification](https://www.omg.org/spec/BPMN/2.0/)
+- [Camunda BPMN Reference](https://docs.camunda.org/manual/reference/bpmn20/)
+- [bpmn.io Documentation](https://bpmn.io/toolkit/bpmn-js/)
+
+### Community & Support
+- **GitHub Issues**: Bug reports and feature requests
+- **Discussions**: Community Q&A and ideas
+- **Stack Overflow**: Tag `bpmn-lite` for questions
+- **Discord**: Real-time chat (coming soon)
+
+### Tutorials & Examples
+- [Getting Started Guide](GUIDE.md)
+- [Example Processes](examples/)
+- [Video Tutorials](https://youtube.com/bpmn-lite) (coming soon)
+- [Interactive Playground](https://bpmn-lite.io/playground) (coming soon)
+
+## 📈 Roadmap
+
+### Current Release (v0.4.x)
+- ✅ Core DSL implementation
+- ✅ VSCode extension with live preview
+- ✅ Export to PNG/SVG/Mermaid/BPMN
+- ✅ Cross-platform desktop app
+- ✅ Smart connection resolution
+
+### Next Release (v0.5.0)
+- 🚧 BPMN 2.0 round-trip conversion
+- 🚧 Collaborative editing
+- 🚧 Cloud storage integration
+- 🚧 AI-powered process suggestions
+
+### Future Vision (v1.0+)
+- 📋 Full BPMN 2.0 element support
+- 📋 Process simulation & analysis
+- 📋 Integration with process engines
+- 📋 Enterprise features (SSO, audit)
+
 ## 📄 License
 
-MIT License - see [LICENSE](LICENSE) file for details
+MIT License - Copyright (c) 2025 BPMN-lite DSL Editor Contributors
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+See [LICENSE](LICENSE) file for full details.
 
 ---
 
 <p align="center">
   Made with ❤️ by the BPMN-Lite team<br>
-  <strong>Transform your business processes today!</strong>
+  <strong>Transform your business processes today!</strong><br>
+  <br>
+  <a href="https://github.com/oisee/bpl">GitHub</a> • 
+  <a href="https://bpmn-lite.io">Website</a> • 
+  <a href="https://docs.bpmn-lite.io">Documentation</a>
 </p>
