@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>BPL Mermaid Output Test</title>
+  <style>
+    body {
+      font-family: monospace;
+      padding: 20px;
+    }
+    .test-case {
+      margin: 20px 0;
+      padding: 20px;
+      border: 1px solid #ccc;
+      background: #f5f5f5;
+    }
+    .input {
+      background: #e0e0e0;
+      padding: 10px;
+      white-space: pre-wrap;
+    }
+    .output {
+      background: #fff;
+      padding: 10px;
+      white-space: pre-wrap;
+      border: 1px solid #ddd;
+      margin: 10px 0;
+    }
+    #diagram {
+      margin: 20px 0;
+      border: 1px solid #ddd;
+      padding: 20px;
+      background: #fff;
+    }
+  </style>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+</head>
+<body>
+  <h1>BPL to Mermaid Test - Gateway Connections</h1>
+  
+  <div class="test-case">
+    <h2>Test Case: Payment Gateway</h2>
+    <div class="input">:Process Name
+@Customer
+  place order
+  send: Payment
+  receive: Confirmation
+@System  
+  receive: Payment
+  ?Payment Valid
+    +ship order
+    -cancel order
+  send: Confirmation</div>
+    <div id="mermaid-output" class="output"></div>
+    <div id="diagram"></div>
+  </div>
+
+  <script>
+    // Load the BPL parser from index.html
+    const script = document.createElement('script');
+    script.src = 'dist/index.html';
+    script.onload = function() {
+      // Parser should be available now
+      const parser = new window.BPLParser();
+      
+      const bpl = `:Process Name
+@Customer
+  place order
+  send: Payment
+  receive: Confirmation
+@System  
+  receive: Payment
+  ?Payment Valid
+    +ship order
+    -cancel order
+  send: Confirmation`;
+      
+      try {
+        const result = parser.parse(bpl);
+        const mermaid = parser.toMermaid();
+        
+        // Display the mermaid output
+        document.getElementById('mermaid-output').textContent = mermaid;
+        
+        // Render the diagram
+        document.getElementById('diagram').innerHTML = `<div class="mermaid">${mermaid}</div>`;
+        
+        // Initialize mermaid
+        mermaid.init();
+        
+        // Also log the connections for debugging
+        console.log('Connections:', result.connections);
+        
+        // Check for self-connections
+        const selfConnections = result.connections.filter(conn => 
+          conn.sourceRef === conn.targetRef
+        );
+        
+        if (selfConnections.length > 0) {
+          console.error('SELF-CONNECTIONS FOUND:', selfConnections);
+          document.getElementById('mermaid-output').style.border = '2px solid red';
+        } else {
+          console.log('✓ No self-connections found');
+        }
+        
+        // Check ship order connections
+        const shipOrderTask = Object.values(result.tasks).find(t => 
+          t.name.toLowerCase().includes('ship order')
+        );
+        
+        if (shipOrderTask) {
+          const shipOrderConnections = result.connections.filter(conn => 
+            conn.sourceRef === shipOrderTask.id
+          );
+          console.log('Ship order outgoing connections:', shipOrderConnections);
+          
+          const incomingConnections = result.connections.filter(conn => 
+            conn.targetRef === shipOrderTask.id
+          );
+          console.log('Ship order incoming connections:', incomingConnections);
+        }
+        
+      } catch (error) {
+        console.error('Parse error:', error);
+        document.getElementById('mermaid-output').textContent = 'Error: ' + error.message;
+      }
+    };
+    
+    // If parser is not available in global scope, let's inline it
+    script.onerror = function() {
+      console.log('Could not load external parser, using inline version');
+      
+      // Paste the parser code here (from src/index.html)
+      fetch('src/index.html')
+        .then(response => response.text())
+        .then(html => {
+          // Extract the parser script
+          const scriptMatch = html.match(/<script>([\s\S]*?)<\/script>/);
+          if (scriptMatch) {
+            eval(scriptMatch[1]);
+            runTest();
+          }
+        });
+    };
+    
+    document.head.appendChild(script);
+    
+    function runTest() {
+      const parser = new BPLParser();
+      
+      const bpl = `:Process Name
+@Customer
+  place order
+  send: Payment
+  receive: Confirmation
+@System  
+  receive: Payment
+  ?Payment Valid
+    +ship order
+    -cancel order
+  send: Confirmation`;
+      
+      const result = parser.parse(bpl);
+      const mermaidCode = parser.toMermaid();
+      
+      document.getElementById('mermaid-output').textContent = mermaidCode;
+      document.getElementById('diagram').innerHTML = `<div class="mermaid">${mermaidCode}</div>`;
+      
+      mermaid.initialize({ startOnLoad: true });
+      mermaid.contentLoaded();
+    }
+  </script>
+</body>
+</html>

@@ -2,6 +2,13 @@
 
 All notable changes to the "bpmn-lite" extension will be documented in this file.
 
+## [0.4.4] - 2025-07-15
+
+### Fixed
+- **Gateway Branch Self-Connection Bug**: Fixed issue where positive gateway branches would connect to themselves
+- Removed special case logic for payment gateways that was causing branch tasks to find themselves
+- Positive branches now correctly connect to the next task after the gateway block
+
 ## [0.4.0] - 2025-07-09
 
 ### Major Features

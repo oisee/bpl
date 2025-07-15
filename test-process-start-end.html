@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Process Start/End Test</title>
+  <style>
+    body { font-family: monospace; padding: 20px; }
+    .test { margin: 20px 0; border: 1px solid #ccc; padding: 10px; }
+    pre { background: #f0f0f0; padding: 10px; overflow-x: auto; }
+    .error { color: red; font-weight: bold; }
+    .success { color: green; font-weight: bold; }
+  </style>
+</head>
+<body>
+  <h1>Process-level Start/End Test</h1>
+  
+  <div class="test">
+    <h2>Test 1: Process-level Start/End</h2>
+    <pre id="test1-input">:Process Name
+  !Start
+@Customer
+  place order
+  send: Payment
+  receive: Confirmation
+@System  
+  receive: Payment
+  ?Payment Valid
+    +ship order
+    -cancel order
+  send: Confirmation
+  !End</pre>
+    <h3>Parse Result:</h3>
+    <pre id="test1-result"></pre>
+    <h3>Mermaid Output:</h3>
+    <pre id="test1-mermaid"></pre>
+  </div>
+
+  <div class="test">
+    <h2>Test 2: Lane-level Start/End</h2>
+    <pre id="test2-input">:Process Name
+@Customer
+  !Start
+  place order
+  send: Payment
+  receive: Confirmation
+@System  
+  receive: Payment
+  ?Payment Valid
+    +ship order
+    -cancel order
+  send: Confirmation
+  !End</pre>
+    <h3>Parse Result:</h3>
+    <pre id="test2-result"></pre>
+    <h3>Mermaid Output:</h3>
+    <pre id="test2-mermaid"></pre>
+  </div>
+
+  <div id="editor" style="display:none"></div>
+  <div id="output" style="display:none"></div>
+  <div id="ast-output" style="display:none"></div>
+  
+  <script src="src/index.html"></script>
+  <script>
+    function runTest(testNum) {
+      const input = document.getElementById(`test${testNum}-input`).textContent;
+      const resultEl = document.getElementById(`test${testNum}-result`);
+      const mermaidEl = document.getElementById(`test${testNum}-mermaid`);
+      
+      try {
+        const parser = new BpmnLiteParser();
+        const result = parser.parse(input);
+        
+        // Show relevant parse results
+        let output = 'LANES:\n';
+        Object.entries(result.lanes).forEach(([id, lane]) => {
+          output += `  ${id}: ${lane.tasks.length} tasks\n`;
+          lane.tasks.forEach(taskId => {
+            const task = result.tasks[taskId];
+            output += `    - ${taskId}: ${task ? task.name : 'MISSING'}\n`;
+          });
+        });
+        
+        output += '\nTASKS:\n';
+        Object.entries(result.tasks).forEach(([id, task]) => {
+          output += `  ${id}: ${task.name} (${task.type}) lane=${task.lane || 'none'}\n`;
+        });
+        
+        output += '\nCONNECTIONS:\n';
+        result.connections.forEach(conn => {
+          const source = result.tasks[conn.sourceRef] || { name: conn.sourceRef };
+          const target = result.tasks[conn.targetRef] || { name: conn.targetRef };
+          output += `  ${source.name} -> ${target.name}\n`;
+        });
+        
+        // Check for issues
+        output += '\nISSUES:\n';
+        
+        // Check for sg0
+        const mermaid = parser.toMermaid();
+        if (mermaid.includes('sg0')) {
+          output += '<span class="error">  ❌ Found sg0 in Mermaid</span>\n';
+        } else {
+          output += '<span class="success">  ✓ No sg0 found</span>\n';
+        }
+        
+        // Check End connections
+        const sendConf = Object.values(result.tasks).find(t => 
+          t.name && t.name.toLowerCase().includes('send confirmation')
+        );
+        const endTask = Object.values(result.tasks).find(t => 
+          t.type === 'event' && t.eventType === 'end'
+        );
+        
+        if (sendConf && endTask) {
+          const hasConnection = result.connections.some(c => 
+            c.sourceRef === sendConf.id && c.targetRef === endTask.id
+          );
+          if (hasConnection) {
+            output += '<span class="success">  ✓ Send Confirmation connects to End</span>\n';
+          } else {
+            output += '<span class="error">  ❌ Send Confirmation does NOT connect to End</span>\n';
+          }
+        }
+        
+        resultEl.innerHTML = output;
+        mermaidEl.textContent = mermaid;
+        
+      } catch (error) {
+        resultEl.innerHTML = `<span class="error">Error: ${error.message}</span>`;
+        console.error(error);
+      }
+    }
+    
+    // Run tests after parser loads
+    setTimeout(() => {
+      runTest(1);
+      runTest(2);
+    }, 100);
+  </script>
+</body>
+</html>

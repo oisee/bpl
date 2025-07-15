@@ -61,21 +61,36 @@ export class BpmnLiteParser {
             if (parts.length > 1) {
                 // Process each part and create the connections
                 let prevTaskId: string | null = null;
+                let prevOperator: string | null = null;
                 
                 for (let j = 0; j < parts.length; j++) {
-                    const part = parts[j].trim();
-                    if (!part) continue;
+                    const part = parts[j];
                     
-                    // Process this part (pass line number)
-                    const taskId = this.processLinePart(part, firstChar, i);
+                    // Skip operators
+                    if (part === '->' || part === '<-') {
+                        prevOperator = part;
+                        continue;
+                    }
                     
-                    // Create connection if we have a previous task
-                    if (prevTaskId && taskId) {
-                        const connectionType = j > 0 && parts[j-1].includes('<-') ? 'backward' : 'forward';
-                        
-                        if (connectionType === 'forward') {
+                    // Check if this part needs special handling for cross-lane references
+                    let taskId: string | null = null;
+                    
+                    // If we have a previous operator and this might be a reference to another task
+                    if (prevOperator && !this.isSpecialLine(part)) {
+                        // Try to resolve it as a task reference first
+                        taskId = this.resolveTaskId(part, true); // Create if not found
+                    }
+                    
+                    // If not resolved as reference, process normally
+                    if (!taskId) {
+                        taskId = this.processLinePart(part, part.charAt(0), i);
+                    }
+                    
+                    // Create connection if we have a previous task and operator
+                    if (prevTaskId && taskId && prevOperator) {
+                        if (prevOperator === '->') {
                             this.addConnection('flow', prevTaskId, taskId);
-                        } else {
+                        } else if (prevOperator === '<-') {
                             this.addConnection('flow', taskId, prevTaskId);
                         }
                     }
@@ -121,14 +136,18 @@ export class BpmnLiteParser {
     }
 
     private splitConnections(line: string): string[] {
-        const result: string[] = [];
+        const parts: string[] = [];
         let currentPart = '';
         let i = 0;
         
         while (i < line.length) {
             if (line.substr(i, 2) === '->' || line.substr(i, 2) === '<-') {
-                result.push(currentPart);
-                result.push(line.substr(i, 2));
+                // Add the current part if it exists
+                if (currentPart.trim()) {
+                    parts.push(currentPart.trim());
+                }
+                // Add the operator as a separate part
+                parts.push(line.substr(i, 2));
                 currentPart = '';
                 i += 2;
             } else {
@@ -137,18 +156,9 @@ export class BpmnLiteParser {
             }
         }
         
-        if (currentPart) {
-            result.push(currentPart);
-        }
-        
-        // Rejoin into proper parts that maintain the operator with the right part
-        const parts: string[] = [];
-        for (let i = 0; i < result.length; i++) {
-            if (result[i] === '->' || result[i] === '<-') {
-                parts[parts.length - 1] += result[i];
-            } else {
-                parts.push(result[i]);
-            }
+        // Add the last part if it exists
+        if (currentPart.trim()) {
+            parts.push(currentPart.trim());
         }
         
         return parts;
@@ -205,25 +215,28 @@ export class BpmnLiteParser {
     }
 
     private parseEvent(line: string): string {
-        if (!this.currentLane) {
-            this.parseLane('@Default');
-        }
-        
         const eventName = line.substring(1).trim();
-        const laneName = this.currentLane!.replace('@', '');
-        const normalizedLaneName = this.normalizeId(laneName);
         let eventType = 'intermediate';
         let eventId: string;
+        let isProcessLevel = false;
         
         if (eventName.toLowerCase() === 'start') {
             eventType = 'start';
             // Start events are process-level, not lane-specific
             eventId = 'process_start';
+            isProcessLevel = true;
         } else if (eventName.toLowerCase() === 'end') {
             eventType = 'end';
             // End events are process-level, not lane-specific
             eventId = 'process_end';
+            isProcessLevel = true;
         } else {
+            // For non-start/end events, we need a lane
+            if (!this.currentLane) {
+                this.parseLane('@Default');
+            }
+            const laneName = this.currentLane!.replace('@', '');
+            const normalizedLaneName = this.normalizeId(laneName);
             // Intermediate events can be lane-specific
             eventId = `${normalizedLaneName}_${this.normalizeId(eventName)}`;
         }
@@ -235,21 +248,25 @@ export class BpmnLiteParser {
                 eventType: eventType,
                 name: eventName,
                 id: eventId,
-                lane: eventType === 'start' || eventType === 'end' ? null : laneName // Process-level events have no lane
+                lane: isProcessLevel ? null : this.currentLane!.replace('@', '') // Process-level events have no lane
             };
             
             this.events.push(eventId);
         }
         
         // For process-level events (Start/End), don't add to lane tasks
-        if (eventType !== 'start' && eventType !== 'end') {
+        if (!isProcessLevel && this.currentLane) {
             this.lanes[this.currentLane!].tasks.push(eventId);
         }
         
+        // Add event to scope for reference
         const simpleName = this.normalizeId(eventName);
         this.taskScope[simpleName] = eventId;
-        this.taskScope[`${laneName}.${simpleName}`] = eventId;
-        this.taskScope[`@${laneName}.${simpleName}`] = eventId;
+        if (this.currentLane) {
+            const laneName = this.currentLane!.replace('@', '');
+            this.taskScope[`${laneName}.${simpleName}`] = eventId;
+            this.taskScope[`@${laneName}.${simpleName}`] = eventId;
+        }
         
         return eventId;
     }
@@ -363,11 +380,20 @@ export class BpmnLiteParser {
         }
         
         const parentGateway = this.gatewayStack[this.gatewayStack.length - 1];
-        const branchName = line.substring(1).trim();
+        let branchName = line.substring(1).trim();
         const laneName = this.currentLane!.replace('@', '');
         const normalizedLaneName = this.normalizeId(laneName);
         
-        // Check if this is an End event branch
+        // Check if branch contains arrow operators (e.g., "cancel order -> !End")
+        // If so, only use the first part as the branch name
+        if (branchName.includes('->') || branchName.includes('<-')) {
+            const parts = this.splitConnections(branchName);
+            if (parts.length > 0) {
+                branchName = parts[0]; // Use only the first part as branch name
+            }
+        }
+        
+        // Check if this is a direct End event branch (just "!End" or "End")
         if (branchName.toLowerCase() === '!end' || branchName.toLowerCase() === 'end') {
             // Don't create a branch task, connect directly to the process-level end event
             const endEventId = 'process_end';
@@ -470,8 +496,8 @@ export class BpmnLiteParser {
                     messageName = parts[0];
                     const sourceRef = parts.slice(1).join(' ');
                     
-                    const sourceId = this.resolveTaskId(sourceRef);
-                    const targetId = this.resolveTaskId(targetPart);
+                    const sourceId = this.resolveTaskId(sourceRef, false);
+                    const targetId = this.resolveTaskId(targetPart, false);
                     
                     if (sourceId && targetId) {
                         const messageId = `message_${this.normalizeId(messageName)}`;
@@ -500,7 +526,7 @@ export class BpmnLiteParser {
                 } else {
                     messageName = sourcePart;
                     const sourceId = this.lastTask;
-                    const targetId = this.resolveTaskId(targetPart);
+                    const targetId = this.resolveTaskId(targetPart, false);
                     
                     if (sourceId && targetId) {
                         const messageId = `message_${this.normalizeId(messageName)}`;
@@ -552,7 +578,7 @@ export class BpmnLiteParser {
             });
             
             if (taskRef) {
-                const taskId = this.resolveTaskId(taskRef);
+                const taskId = this.resolveTaskId(taskRef, false);
                 if (taskId) {
                     // Check if there's a connection break between these tasks
                     const hasBreak = this.hasConnectionBreakBetween(
@@ -728,18 +754,8 @@ export class BpmnLiteParser {
             data.positive.forEach((branchId: string) => {
                 const branch = this.tasks[branchId];
                 
-                if (gateway.name.toLowerCase().includes('payment')) {
-                    const shipOrderTask = Object.values(this.tasks).find(task => 
-                        task.lane === gateway.lane && 
-                        task.name.toLowerCase().includes('ship order')
-                    );
-                    
-                    if (shipOrderTask) {
-                        this.addConnection('flow', branchId, shipOrderTask.id);
-                    } else if (data.nextTask) {
-                        this.addConnection('flow', branchId, data.nextTask);
-                    }
-                } else if (data.nextTask) {
+                // Always connect positive branches to the next task if available
+                if (data.nextTask) {
                     this.addConnection('flow', branchId, data.nextTask);
                 }
             });
@@ -915,11 +931,12 @@ export class BpmnLiteParser {
         return null;
     }
 
-    private resolveTaskId(taskRef: string): string | null {
+    private resolveTaskId(taskRef: string, createIfNotFound: boolean = false): string | null {
         if (!taskRef) return null;
         
         taskRef = taskRef.trim();
         
+        // 1. Check direct scope lookup
         if (this.taskScope[taskRef]) {
             return this.taskScope[taskRef];
         }
@@ -929,6 +946,7 @@ export class BpmnLiteParser {
             return this.taskScope[normalized];
         }
         
+        // 2. Check if it's a fully qualified reference (lane.task)
         if (taskRef.includes('.')) {
             const parts = taskRef.split('.');
             
@@ -960,36 +978,92 @@ export class BpmnLiteParser {
                     }
                 }
                 
-                const directId = `${lane}_${normalizedTask}`;
+                const directId = `${normalizedLane}_${normalizedTask}`;
                 if (this.tasks[directId]) {
                     return directId;
                 }
-                
-                const laneTasks = Object.values(this.tasks).filter(t => 
-                    t.lane && t.lane.toLowerCase() === lane.toLowerCase()
-                );
-                
-                const matchingTask = laneTasks.find(t => 
-                    this.normalizeId(t.name) === normalizedTask || 
-                    (t.messageName && this.normalizeId(t.messageName) === normalizedTask)
-                );
-                
-                if (matchingTask) {
-                    return matchingTask.id;
-                }
-            }
-        } else {
-            const matchingTask = Object.values(this.tasks).find(t => 
-                this.normalizeId(t.name) === normalized || 
-                (t.messageName && this.normalizeId(t.messageName) === normalized)
-            );
-            
-            if (matchingTask) {
-                return matchingTask.id;
             }
         }
         
+        // 3. Search across all lanes in order
+        const allLaneNames = Object.keys(this.lanes);
+        const currentLaneIndex = this.currentLane ? allLaneNames.indexOf(this.currentLane) : -1;
+        
+        // 3a. First search in current lane
+        if (this.currentLane) {
+            const currentLaneName = this.currentLane.replace('@', '');
+            const taskInCurrentLane = this.findTaskInLane(currentLaneName, normalized);
+            if (taskInCurrentLane) {
+                return taskInCurrentLane.id;
+            }
+        }
+        
+        // 3b. Search in previous lanes (going up)
+        for (let i = currentLaneIndex - 1; i >= 0; i--) {
+            const laneName = allLaneNames[i].replace('@', '');
+            const task = this.findTaskInLane(laneName, normalized);
+            if (task) {
+                return task.id;
+            }
+        }
+        
+        // 3c. Search in subsequent lanes (going down)
+        for (let i = currentLaneIndex + 1; i < allLaneNames.length; i++) {
+            const laneName = allLaneNames[i].replace('@', '');
+            const task = this.findTaskInLane(laneName, normalized);
+            if (task) {
+                return task.id;
+            }
+        }
+        
+        // 4. If not found and createIfNotFound is true, create implicit task
+        if (createIfNotFound && this.currentLane) {
+            const implicitTaskId = this.createImplicitTask(taskRef);
+            return implicitTaskId;
+        }
+        
         return null;
+    }
+    
+    private findTaskInLane(laneName: string, normalizedTaskName: string): any {
+        const laneTasks = Object.values(this.tasks).filter(t => 
+            t.lane && t.lane.toLowerCase() === laneName.toLowerCase()
+        );
+        
+        return laneTasks.find(t => 
+            this.normalizeId(t.name) === normalizedTaskName || 
+            (t.messageName && this.normalizeId(t.messageName) === normalizedTaskName)
+        );
+    }
+    
+    private createImplicitTask(taskName: string): string {
+        if (!this.currentLane) {
+            this.parseLane('@Default');
+        }
+        
+        const laneName = this.currentLane!.replace('@', '');
+        const normalizedLaneName = this.normalizeId(laneName);
+        const taskId = `${normalizedLaneName}_${this.normalizeId(taskName)}`;
+        
+        // Create the implicit task
+        this.tasks[taskId] = {
+            type: 'task',
+            name: taskName,
+            id: taskId,
+            lane: laneName,
+            implicit: true // Mark as implicitly created
+        };
+        
+        // Add to lane tasks
+        this.lanes[this.currentLane!].tasks.push(taskId);
+        
+        // Add to scope
+        const simpleName = this.normalizeId(taskName);
+        this.taskScope[simpleName] = taskId;
+        this.taskScope[`${laneName}.${simpleName}`] = taskId;
+        this.taskScope[`@${laneName}.${simpleName}`] = taskId;
+        
+        return taskId;
     }
 
     private normalizeId(name: string): string {
@@ -997,6 +1071,12 @@ export class BpmnLiteParser {
         return name.toLowerCase()
             .replace(/[^a-z0-9]+/g, '_')
             .replace(/^_+|_+$/g, '');
+    }
+    
+    private isSpecialLine(line: string): boolean {
+        if (!line || !line.trim()) return true;
+        const firstChar = line.trim().charAt(0);
+        return [':', '@', '^', '#', '?', '+', '-', '"', '!', '/'].includes(firstChar);
     }
     
     private hasConnectionBreakBetween(lineNum1: number | undefined, lineNum2: number | undefined): boolean {

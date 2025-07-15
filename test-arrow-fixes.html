@@ -1,0 +1,1017 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Test Arrow Fixes</title>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10.6.1/dist/mermaid.min.js"></script>
+  <style>
+    body { font-family: Arial, sans-serif; padding: 20px; }
+    .test-case { margin-bottom: 30px; border: 1px solid #ccc; padding: 15px; }
+    .bpl-code { background: #f5f5f5; padding: 10px; white-space: pre; font-family: monospace; }
+    .mermaid-output { border: 1px solid #ddd; padding: 10px; margin-top: 10px; }
+    .error { color: red; }
+    .success { color: green; }
+  </style>
+</head>
+<body>
+  <h1>Testing Arrow Connection Fixes</h1>
+  
+  <div class="test-case">
+    <h2>Test 1: Original Example</h2>
+    <div class="bpl-code">:Process Name
+@Customer
+  place order
+  send: Payment
+  receive: Confirmation
+@System
+  receive: Payment
+  ?Payment Valid
+    +ship order
+    -cancel order
+  send: Confirmation -> !End
+  kokoko</div>
+    <div id="test1-output" class="mermaid-output"></div>
+    <div class="expected">
+      <h4>Expected behavior:</h4>
+      <ul>
+        <li>!End should be a process-level End event (outside lanes)</li>
+        <li>"send: Confirmation" should connect to !End</li>
+        <li>"send: Confirmation" should also connect to "kokoko"</li>
+        <li>No connection from !End to kokoko</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="test-case">
+    <h2>Test 2: Multiple Arrows in One Line</h2>
+    <div class="bpl-code">:Multi Arrow Test
+@Lane1
+  Task A -> Task B -> Task C
+  Task D <- Task E <- Task F
+  Task G -> Task H <- Task I</div>
+    <div id="test2-output" class="mermaid-output"></div>
+  </div>
+
+  <div class="test-case">
+    <h2>Test 3: Mixed Direction Connections</h2>
+    <div class="bpl-code">:Mixed Directions
+@Process
+  Start -> Review <- Approve -> Deploy
+  Test <- Fix -> Retest -> !End</div>
+    <div id="test3-output" class="mermaid-output"></div>
+  </div>
+
+  <script>
+    // Copy the fixed parser here
+    class BpmnLiteParser {
+      constructor() {
+        this.processes = [];
+        this.lanes = {};
+        this.tasks = {};
+        this.connections = [];
+        this.dataObjects = [];
+        this.messages = [];
+        this.events = [];
+        this.currentProcess = null;
+        this.currentLane = null;
+        this.lastTask = null;
+        this.taskScope = {};
+        this.gatewayStack = [];
+        this.connectionBreaks = [];
+        this.taskLineNumbers = {};
+      }
+
+      parse(text) {
+        // Reset state
+        this.processes = [];
+        this.lanes = {};
+        this.tasks = {};
+        this.connections = [];
+        this.dataObjects = [];
+        this.messages = [];
+        this.events = [];
+        this.currentProcess = null;
+        this.currentLane = null;
+        this.lastTask = null;
+        this.taskScope = {};
+        this.gatewayStack = [];
+        this.connectionBreaks = [];
+        this.taskLineNumbers = {};
+
+        const lines = text.split('\n');
+        
+        // Create default process if none specified
+        this.ensureProcess("Default Process");
+        
+        // First pass: collect processes, lanes, and tasks
+        for (let i = 0; i < lines.length; i++) {
+          const originalLine = lines[i];
+          const line = originalLine.trim();
+          if (!line) continue; // Skip empty lines
+          
+          // Check for connection break line
+          if (line === '---' || line.match(/^-{3,}$/)) {
+            this.connectionBreaks.push(i);
+            continue; // Skip processing this line further
+          }
+          
+          // Find first non-whitespace character for line type detection
+          const firstNonWhitespace = line.match(/\S/);
+          if (!firstNonWhitespace) continue;
+          
+          const firstChar = firstNonWhitespace[0];
+          
+          // Check for connected parts with -> or <- operators
+          const parts = this.splitConnections(line);
+          
+          if (parts.length > 1) {
+            // Process each part and create the connections
+            let prevTaskId = null;
+            let prevOperator = null;
+            
+            for (let j = 0; j < parts.length; j++) {
+              const part = parts[j];
+              
+              // Skip operators
+              if (part === '->' || part === '<-') {
+                prevOperator = part;
+                continue;
+              }
+              
+              // Process this part (pass line number)
+              const taskId = this.processLinePart(part, part.charAt(0), i);
+              
+              // Create connection if we have a previous task and operator
+              if (prevTaskId && taskId && prevOperator) {
+                if (prevOperator === '->') {
+                  this.addConnection('flow', prevTaskId, taskId);
+                } else if (prevOperator === '<-') {
+                  this.addConnection('flow', taskId, prevTaskId);
+                }
+              }
+              
+              if (taskId) {
+                prevTaskId = taskId;
+              }
+            }
+          } else {
+            // Single part, process normally (pass line number)
+            this.processLinePart(line, firstChar, i);
+          }
+        }
+
+        // Auto-inject connection breaks after End events
+        this.injectConnectionBreaksAfterEndEvents(lines);
+
+        // Automatically connect sequential tasks
+        this.connectSequentialTasks();
+
+        // Build the AST
+        const ast = {
+          type: 'bpmnModel',
+          processes: this.processes.map(processName => ({
+            type: 'process',
+            name: processName,
+            id: this.normalizeId(processName),
+            lanes: Object.entries(this.lanes)
+              .filter(([_, lane]) => lane.process === processName)
+              .map(([laneName, lane]) => ({
+                type: 'lane',
+                name: laneName.replace('@', ''),
+                id: this.normalizeId(laneName),
+                elements: lane.tasks.map(taskId => this.tasks[taskId])
+              }))
+          })),
+          connections: this.connections,
+          dataObjects: this.dataObjects,
+          messages: this.messages
+        };
+
+        return ast;
+      }
+      
+      splitConnections(line) {
+        const parts = [];
+        let currentPart = '';
+        let i = 0;
+        
+        while (i < line.length) {
+          if (line.substr(i, 2) === '->' || line.substr(i, 2) === '<-') {
+            // Add the current part if it exists
+            if (currentPart.trim()) {
+              parts.push(currentPart.trim());
+            }
+            // Add the operator as a separate part
+            parts.push(line.substr(i, 2));
+            currentPart = '';
+            i += 2;
+          } else {
+            currentPart += line[i];
+            i++;
+          }
+        }
+        
+        // Add the last part if it exists
+        if (currentPart.trim()) {
+          parts.push(currentPart.trim());
+        }
+        
+        return parts;
+      }
+      
+      processLinePart(line, firstChar, lineNumber) {
+        // Process based on the first character
+        let taskId = null;
+        
+        switch(firstChar) {
+          case ':': // Process definition
+            this.parseProcess(line);
+            break;
+          case '@': // Lane definition
+            this.parseLane(line);
+            break;
+          case '^': // Message flow
+            taskId = this.parseConnection(line);
+            break;
+          case '#': // Data object
+            taskId = this.parseDataObject(line);
+            break;
+          case '?': // Gateway
+            taskId = this.parseGateway(line);
+            break;
+          case '+': // Positive branch
+          case '-': // Negative branch
+            taskId = this.parseGatewayBranch(line, firstChar);
+            break;
+          case '"': // Comment
+            taskId = this.parseComment(line);
+            break;
+          case '!': // Event
+            taskId = this.parseEvent(line);
+            break;
+          case '/': // Technical comment (ignored)
+            if (line.startsWith('//')) {
+              // Ignore technical comments
+              break;
+            }
+            // If not a comment, treat as a task
+            taskId = this.parseTask(line);
+            break;
+          default:
+            // Check if this is a task
+            taskId = this.parseTask(line);
+        }
+        
+        // Update last task if we created one
+        if (taskId) {
+          this.lastTask = taskId;
+          // Store line number for this task
+          if (lineNumber !== undefined) {
+            this.taskLineNumbers[taskId] = lineNumber;
+          }
+        }
+        
+        return taskId;
+      }
+      
+      parseEvent(line) {
+        const eventName = line.substring(1).trim();
+        let eventType = 'intermediate';
+        let eventId;
+        let isProcessLevel = false;
+        
+        if (eventName.toLowerCase() === 'start') {
+          eventType = 'start';
+          // Start events are process-level, not lane-specific
+          eventId = 'process_start';
+          isProcessLevel = true;
+        } else if (eventName.toLowerCase() === 'end') {
+          eventType = 'end';
+          // End events are process-level, not lane-specific
+          eventId = 'process_end';
+          isProcessLevel = true;
+        } else {
+          // For non-start/end events, we need a lane
+          if (!this.currentLane) {
+            this.parseLane('@Default');
+          }
+          const laneName = this.currentLane.replace('@', '');
+          const normalizedLaneName = this.normalizeId(laneName);
+          // Intermediate events can be lane-specific
+          eventId = `${normalizedLaneName}_${this.normalizeId(eventName)}`;
+        }
+        
+        // Only create the event if it doesn't already exist (for Start/End)
+        if (!this.tasks[eventId]) {
+          this.tasks[eventId] = {
+            type: 'event',
+            eventType: eventType,
+            name: eventName,
+            id: eventId,
+            lane: isProcessLevel ? null : this.currentLane.replace('@', '') // Process-level events have no lane
+          };
+          
+          this.events.push(eventId);
+        }
+        
+        // For process-level events (Start/End), don't add to lane tasks
+        if (!isProcessLevel && this.currentLane) {
+          this.lanes[this.currentLane].tasks.push(eventId);
+        }
+        
+        // Add event to scope for reference
+        const simpleName = this.normalizeId(eventName);
+        this.taskScope[simpleName] = eventId;
+        if (this.currentLane) {
+          const laneName = this.currentLane.replace('@', '');
+          this.taskScope[`${laneName}.${simpleName}`] = eventId;
+          this.taskScope[`@${laneName}.${simpleName}`] = eventId;
+        }
+        
+        return eventId;
+      }
+
+      ensureProcess(name) {
+        if (!this.processes.includes(name)) {
+          this.processes.push(name);
+          this.currentProcess = name;
+        }
+      }
+
+      parseProcess(line) {
+        const processName = line.substring(1).trim();
+        this.ensureProcess(processName);
+      }
+
+      parseLane(line) {
+        const laneName = line.trim();
+        if (!this.lanes[laneName]) {
+          this.lanes[laneName] = {
+            process: this.currentProcess,
+            tasks: []
+          };
+        }
+        this.currentLane = laneName;
+        this.lastTask = null; // Reset last task when changing lanes
+      }
+
+      parseTask(line) {
+        if (!this.currentLane) {
+          // Create a default lane if needed
+          this.parseLane('@Default');
+        }
+        
+        // Already trimmed the line in the main parse method
+        if (!line) return null;
+        
+        let taskType = 'task';
+        let taskName = line;
+        let originalName = line; // Keep the original name for display
+        
+        // Check task type based on prefix
+        if (line.startsWith('send:')) {
+          taskType = 'send';
+          taskName = line.substring(5).trim(); // Extract just the message name
+          originalName = `send: ${taskName}`;
+        } else if (line.startsWith('receive:')) {
+          taskType = 'receive';
+          taskName = line.substring(8).trim(); // Extract just the message name
+          originalName = `receive: ${taskName}`;
+        }
+        
+        const laneName = this.currentLane.replace('@', '');
+        const normalizedLaneName = this.normalizeId(laneName);
+        const taskId = `${normalizedLaneName}_${this.normalizeId(originalName)}`;
+        
+        this.tasks[taskId] = {
+          type: taskType,
+          name: originalName,
+          messageName: taskType === 'send' || taskType === 'receive' ? taskName : null,
+          id: taskId,
+          lane: laneName
+        };
+        
+        this.lanes[this.currentLane].tasks.push(taskId);
+        
+        // Create multiple ways to reference the task
+        const simpleName = this.normalizeId(taskName);
+        this.taskScope[simpleName] = taskId;
+        this.taskScope[`${laneName}.${simpleName}`] = taskId;
+        this.taskScope[`@${laneName}.${simpleName}`] = taskId;
+        
+        // Also add reference with full name
+        const fullName = this.normalizeId(originalName);
+        this.taskScope[fullName] = taskId;
+        this.taskScope[`${laneName}.${fullName}`] = taskId;
+        this.taskScope[`@${laneName}.${fullName}`] = taskId;
+        
+        return taskId;
+      }
+
+      parseGateway(line) {
+        if (!this.currentLane) {
+          // Create a default lane if needed
+          this.parseLane('@Default');
+        }
+        
+        const gatewayName = line.substring(1).trim();
+        const laneName = this.currentLane.replace('@', '');
+        const normalizedLaneName = this.normalizeId(laneName);
+        const gatewayId = `${normalizedLaneName}_${this.normalizeId(gatewayName)}`;
+        
+        this.tasks[gatewayId] = {
+          type: 'gateway',
+          gatewayType: 'exclusive',
+          name: gatewayName,
+          id: gatewayId,
+          lane: laneName,
+          branches: []
+        };
+        
+        this.lanes[this.currentLane].tasks.push(gatewayId);
+        
+        // Create multiple ways to reference the gateway
+        const simpleName = this.normalizeId(gatewayName);
+        this.taskScope[simpleName] = gatewayId;
+        this.taskScope[`${laneName}.${simpleName}`] = gatewayId;
+        this.taskScope[`@${laneName}.${simpleName}`] = gatewayId;
+        
+        // Track gateway for branches
+        this.gatewayStack.push(gatewayId);
+        
+        return gatewayId;
+      }
+
+      parseGatewayBranch(line, branchChar) {
+        if (this.gatewayStack.length === 0) {
+          return null; // No gateway to attach to
+        }
+        
+        const parentGateway = this.gatewayStack[this.gatewayStack.length - 1];
+        const branchName = line.substring(1).trim();
+        const laneName = this.currentLane.replace('@', '');
+        const normalizedLaneName = this.normalizeId(laneName);
+        
+        // Check if this is an End event branch
+        if (branchName.toLowerCase() === '!end' || branchName.toLowerCase() === 'end') {
+          // Don't create a branch task, connect directly to the process-level end event
+          const endEventId = 'process_end';
+          
+          // Ensure process-level end event exists
+          if (!this.tasks[endEventId]) {
+            this.tasks[endEventId] = {
+              type: 'event',
+              eventType: 'end',
+              name: 'End',
+              id: endEventId,
+              lane: null // Process-level event has no lane
+            };
+            
+            // Add to events list
+            if (!this.events.includes(endEventId)) {
+              this.events.push(endEventId);
+            }
+          }
+          
+          // Connect gateway to end event directly with appropriate label
+          const branchLabel = branchChar === '+' ? 'Yes' : 'No';
+          this.addConnection('flow', parentGateway, endEventId, branchLabel);
+          
+          return endEventId;
+        }
+        
+        const branchId = `${normalizedLaneName}_${this.normalizeId(branchName)}`;
+        
+        let displayName = branchName;
+        let branchLabel = branchChar === '+' ? 'Yes' : 'No';
+        
+        // Check for custom label format "|label|task name"
+        if (branchName.startsWith('|') && branchName.includes('|', 1)) {
+          const labelEnd = branchName.indexOf('|', 1);
+          branchLabel = branchName.substring(1, labelEnd);
+          displayName = branchName.substring(labelEnd + 1).trim();
+        }
+        
+        this.tasks[branchId] = {
+          type: 'branch',
+          branchType: branchChar === '+' ? 'positive' : 'negative',
+          name: displayName,
+          label: branchLabel,
+          id: branchId,
+          lane: laneName,
+          parentGateway: parentGateway
+        };
+        
+        this.tasks[parentGateway].branches.push(branchId);
+        this.lanes[this.currentLane].tasks.push(branchId);
+        
+        // Create multiple ways to reference the branch
+        const simpleName = this.normalizeId(displayName);
+        this.taskScope[simpleName] = branchId;
+        this.taskScope[`${laneName}.${simpleName}`] = branchId;
+        this.taskScope[`@${laneName}.${simpleName}`] = branchId;
+        
+        return branchId;
+      }
+
+      parseComment(line) {
+        if (!this.currentLane) {
+          // Create a default lane if needed
+          this.parseLane('@Default');
+        }
+        
+        const commentText = line.substring(1).trim();
+        const laneName = this.currentLane.replace('@', '');
+        const normalizedLaneName = this.normalizeId(laneName);
+        const commentId = `${normalizedLaneName}_comment_${this.normalizeId(commentText.substring(0, 20))}`;
+        
+        this.tasks[commentId] = {
+          type: 'comment',
+          name: commentText,
+          id: commentId,
+          lane: laneName
+        };
+        
+        this.lanes[this.currentLane].tasks.push(commentId);
+        
+        return commentId;
+      }
+
+      parseConnection(line) {
+        if (line.startsWith('^')) {
+          try {
+            const content = line.substring(1).trim();
+            
+            let sourcePart, targetPart, messageName;
+            
+            if (content.includes('->')) {
+              [sourcePart, targetPart] = content.split('->').map(s => s.trim());
+            } else if (content.includes('<-')) {
+              [targetPart, sourcePart] = content.split('<-').map(s => s.trim());
+            } else {
+              messageName = content;
+              return null;
+            }
+            
+            if (sourcePart.includes('@')) {
+              const parts = sourcePart.split(' ');
+              messageName = parts[0];
+              const sourceRef = parts.slice(1).join(' ');
+              
+              const sourceId = this.resolveTaskId(sourceRef);
+              const targetId = this.resolveTaskId(targetPart);
+              
+              if (sourceId && targetId) {
+                const messageId = `message_${this.normalizeId(messageName)}`;
+                
+                if (!this.messages.find(m => m.id === messageId)) {
+                  this.messages.push({
+                    type: 'message',
+                    name: messageName,
+                    id: messageId,
+                    sourceRef: sourceId,
+                    targetRef: targetId
+                  });
+                }
+                
+                this.addConnection('message', sourceId, targetId, messageName);
+                return targetId;
+              }
+            } else {
+              messageName = sourcePart;
+              const sourceId = this.lastTask;
+              const targetId = this.resolveTaskId(targetPart);
+              
+              if (sourceId && targetId) {
+                const messageId = `message_${this.normalizeId(messageName)}`;
+                
+                if (!this.messages.find(m => m.id === messageId)) {
+                  this.messages.push({
+                    type: 'message',
+                    name: messageName,
+                    id: messageId,
+                    sourceRef: sourceId,
+                    targetRef: targetId
+                  });
+                }
+                
+                this.addConnection('message', sourceId, targetId, messageName);
+                return targetId;
+              }
+            }
+          } catch (error) {
+            console.error(`Error parsing message flow: ${line}`, error);
+          }
+        }
+        
+        return null;
+      }
+
+      parseDataObject(line) {
+        try {
+          const content = line.substring(1).trim();
+          const parts = content.split(' ');
+          const name = parts[0];
+          const taskRef = parts.slice(1).join(' ');
+          
+          const dataObjId = `data_${this.normalizeId(name)}`;
+          
+          this.dataObjects.push({
+            type: 'dataObject',
+            name: name,
+            id: dataObjId,
+            taskRef: taskRef
+          });
+          
+          if (taskRef) {
+            const taskId = this.resolveTaskId(taskRef);
+            if (taskId) {
+              this.addConnection('data', dataObjId, taskId);
+            }
+          }
+          
+          return dataObjId;
+        } catch (error) {
+          console.error(`Error parsing data object: ${line}`, error);
+          return null;
+        }
+      }
+      
+      resolveTaskId(taskRef) {
+        if (!taskRef) return null;
+        
+        taskRef = taskRef.trim();
+        
+        // Check direct lookup
+        if (this.taskScope[taskRef]) {
+          return this.taskScope[taskRef];
+        }
+        
+        // Check normalized lookup
+        const normalized = this.normalizeId(taskRef);
+        if (this.taskScope[normalized]) {
+          return this.taskScope[normalized];
+        }
+        
+        // Check for lane.task format
+        if (taskRef.includes('.')) {
+          const parts = taskRef.split('.');
+          
+          if (parts.length === 2) {
+            let [lane, task] = parts;
+            
+            if (lane.startsWith('@')) {
+              lane = lane.substring(1);
+            }
+            
+            const normalizedTask = this.normalizeId(task);
+            
+            const lookups = [
+              `${lane}.${normalizedTask}`,
+              `@${lane}.${normalizedTask}`,
+              `${lane}_${normalizedTask}`
+            ];
+            
+            const normalizedLane = this.normalizeId(lane);
+            lookups.push(
+              `${normalizedLane}.${normalizedTask}`,
+              `@${normalizedLane}.${normalizedTask}`,
+              `${normalizedLane}_${normalizedTask}`
+            );
+            
+            for (const lookup of lookups) {
+              if (this.taskScope[lookup]) {
+                return this.taskScope[lookup];
+              }
+            }
+            
+            // Direct ID check
+            const directId = `${lane}_${normalizedTask}`;
+            if (this.tasks[directId]) {
+              return directId;
+            }
+            
+            // Search by lane and name
+            const laneTasks = Object.values(this.tasks).filter(t => 
+              t.lane && t.lane.toLowerCase() === lane.toLowerCase()
+            );
+            
+            const matchingTask = laneTasks.find(t => 
+              this.normalizeId(t.name) === normalizedTask || 
+              (t.messageName && this.normalizeId(t.messageName) === normalizedTask)
+            );
+            
+            if (matchingTask) {
+              return matchingTask.id;
+            }
+          }
+        } else {
+          // Search all tasks by name
+          const matchingTask = Object.values(this.tasks).find(t => 
+            this.normalizeId(t.name) === normalized || 
+            (t.messageName && this.normalizeId(t.messageName) === normalized)
+          );
+          
+          if (matchingTask) {
+            return matchingTask.id;
+          }
+        }
+        
+        return null;
+      }
+
+      addConnection(type, sourceId, targetId, name = '') {
+        const connId = `conn_${this.normalizeId(sourceId)}_${this.normalizeId(targetId)}`;
+        
+        this.connections.push({
+          type: type === 'flow' ? 'sequenceFlow' : 
+                type === 'message' ? 'messageFlow' : 'dataAssociation',
+          id: connId,
+          name: name,
+          sourceRef: sourceId,
+          targetRef: targetId
+        });
+      }
+
+      injectConnectionBreaksAfterEndEvents(lines) {
+        // Find all End event references in the text and auto-inject breaks
+        for (let i = 0; i < lines.length; i++) {
+          const line = lines[i].trim();
+          
+          // Check if this line contains an End event reference
+          if (line === '!End' || line === '!end' || line === '+!End' || line === '-!End') {
+            // Check if there's already a connection break after this line
+            const hasBreakAfter = this.connectionBreaks.some(breakLine => 
+              breakLine > i && breakLine <= i + 2
+            );
+            
+            if (!hasBreakAfter) {
+              // Auto-inject a connection break after this End event
+              this.connectionBreaks.push(i + 1);
+              console.log(`Auto-injected connection break after End event at line ${i + 1}`);
+            }
+          }
+        }
+      }
+
+      connectSequentialTasks() {
+        // Connect tasks within lanes sequentially
+        Object.values(this.lanes).forEach(lane => {
+          let prevTask = null;
+          
+          for (let i = 0; i < lane.tasks.length; i++) {
+            const currentTaskId = lane.tasks[i];
+            const currentTask = this.tasks[currentTaskId];
+            
+            if (currentTask.type === 'branch') {
+              continue; // Skip branch tasks in sequential flow
+            }
+            
+            if (prevTask) {
+              // Check if connection already exists
+              const connectionExists = this.connections.some(conn => 
+                conn.type === 'sequenceFlow' && 
+                conn.sourceRef === prevTask && 
+                conn.targetRef === currentTaskId
+              );
+              
+              if (!connectionExists) {
+                this.addConnection('flow', prevTask, currentTaskId);
+              }
+            }
+            
+            prevTask = currentTaskId;
+          }
+        });
+        
+        // Handle gateway connections
+        Object.values(this.tasks).forEach(task => {
+          if (task.type === 'gateway' && task.branches) {
+            task.branches.forEach(branchId => {
+              // Connect gateway to branch
+              const connectionExists = this.connections.some(conn => 
+                conn.type === 'sequenceFlow' && 
+                conn.sourceRef === task.id && 
+                conn.targetRef === branchId
+              );
+              
+              if (!connectionExists) {
+                this.addConnection('flow', task.id, branchId);
+              }
+            });
+          }
+        });
+        
+        // Connect send/receive tasks with matching messages
+        const sendTasks = Object.values(this.tasks).filter(task => task.type === 'send');
+        const receiveTasks = Object.values(this.tasks).filter(task => task.type === 'receive');
+        
+        sendTasks.forEach(sendTask => {
+          const messageName = sendTask.messageName;
+          
+          if (!messageName) return;
+          
+          const matchingReceive = receiveTasks.find(receiveTask => 
+            receiveTask.messageName === messageName
+          );
+          
+          if (matchingReceive) {
+            const connectionExists = this.connections.some(conn => 
+              conn.type === 'messageFlow' && 
+              conn.sourceRef === sendTask.id && 
+              conn.targetRef === matchingReceive.id
+            );
+            
+            if (!connectionExists) {
+              const messageId = `message_${this.normalizeId(messageName)}`;
+              
+              if (!this.messages.find(m => m.id === messageId)) {
+                this.messages.push({
+                  type: 'message',
+                  name: messageName,
+                  id: messageId,
+                  sourceRef: sendTask.id,
+                  targetRef: matchingReceive.id
+                });
+              }
+              
+              this.addConnection('message', sendTask.id, matchingReceive.id, messageName);
+            }
+          }
+        });
+      }
+
+      normalizeId(name) {
+        if (!name) return 'unknown';
+        return name.toLowerCase()
+          .replace(/[^a-z0-9]+/g, '_')
+          .replace(/^_+|_+$/g, '');
+      }
+
+      toMermaid() {
+        let mermaid = `flowchart TD
+  %% Define node styles
+  classDef event fill:#ffd,stroke:#33f,stroke-width:2px
+  classDef task fill:#bbf,stroke:#33f,stroke-width:2px
+  classDef message fill:#bfb,stroke:#070,stroke-width:2px
+  classDef gateway fill:#fcc,stroke:#f00,stroke-width:2px
+  classDef comment fill:#ffd,stroke:#bb0,stroke-width:1px
+  classDef dataObject fill:#ececff,stroke:#9370db,stroke-width:1px
+  classDef branch fill:#d5ffd5,stroke:#3cb371,stroke-width:1px
+`;
+
+        // Add process-level events (Start/End) outside of any subgraph
+        Object.values(this.tasks).forEach(task => {
+          if (task.type === 'event' && (task.eventType === 'start' || task.eventType === 'end') && task.lane === null) {
+            mermaid += `  ${task.id}([${task.name}]):::event\n`;
+          }
+        });
+
+        this.dataObjects.forEach(dataObj => {
+          mermaid += `  ${dataObj.id}[(${dataObj.name})]:::dataObject\n`;
+        });
+
+        const laneNodes = {};
+        const laneDisplayNames = {};
+        
+        Object.entries(this.lanes).forEach(([laneName, lane]) => {
+          const normalizedLaneName = this.normalizeId(laneName.replace('@', ''));
+          laneNodes[normalizedLaneName] = lane.tasks.filter(taskId => {
+            const task = this.tasks[taskId];
+            return task;
+          });
+          // Store original lane name for display
+          laneDisplayNames[normalizedLaneName] = laneName.replace('@', '');
+        });
+        
+        Object.entries(laneNodes).forEach(([laneName, taskIds], index) => {
+          if (taskIds.length > 0) {
+            // Use sg prefix to ensure valid subgraph names
+            const sgName = `sg${index}`;
+            // Use the original lane name for display
+            const displayName = laneDisplayNames[laneName] || laneName;
+            mermaid += `  subgraph ${sgName}["${displayName}"]\n`;
+            
+            taskIds.forEach(taskId => {
+              const task = this.tasks[taskId];
+              
+              if (!task) return;
+              
+              switch(task.type) {
+                case 'task':
+                  mermaid += `    ${task.id}[${task.name}]:::task\n`;
+                  break;
+                case 'send':
+                case 'receive':
+                  mermaid += `    ${task.id}>${task.name}]:::message\n`;
+                  break;
+                case 'gateway':
+                  mermaid += `    ${task.id}{${task.name}?}:::gateway\n`;
+                  break;
+                case 'branch':
+                  mermaid += `    ${task.id}["${task.name}"]:::branch\n`;
+                  break;
+                case 'comment':
+                  mermaid += `    ${task.id}[/${task.name}/]:::comment\n`;
+                  break;
+                case 'event':
+                  mermaid += `    ${task.id}([${task.name}]):::event\n`;
+                  break;
+              }
+            });
+            
+            mermaid += `  end\n`;
+          }
+        });
+        
+        Object.keys(laneNodes).forEach((laneName, index) => {
+          const sgName = `sg${index}`;
+          const color = index % 2 === 0 ? 
+            'fill:#f9f9f9,stroke:#333,stroke-width:1px' : 
+            'fill:#e6f3ff,stroke:#333,stroke-width:1px';
+          mermaid += `  style ${sgName} ${color}\n`;
+        });
+        
+        mermaid += '\n';
+        
+        mermaid += '  %% Sequence flows\n';
+        this.connections.forEach(conn => {
+          if (conn.type === 'sequenceFlow') {
+            const source = this.tasks[conn.sourceRef];
+            const target = this.tasks[conn.targetRef];
+            
+            if (source && target) {
+              if (source.type === 'gateway' && target.type === 'branch') {
+                mermaid += `  ${conn.sourceRef} -->|${target.label}| ${conn.targetRef}\n`;
+              } else if (source.type === 'gateway' && target.type === 'event' && target.eventType === 'end') {
+                // Gateway to End event with label (from branch)
+                const label = conn.name || 'Yes'; // Default to 'Yes' if no label specified
+                mermaid += `  ${conn.sourceRef} -->|${label}| ${conn.targetRef}\n`;
+              } else {
+                mermaid += `  ${conn.sourceRef} --> ${conn.targetRef}\n`;
+              }
+            }
+          }
+        });
+        
+        mermaid += '  %% Message flows\n';
+        this.connections.forEach(conn => {
+          if (conn.type === 'messageFlow') {
+            const label = conn.name ? `|${conn.name}|` : '';
+            mermaid += `  ${conn.sourceRef} -.->${ label } ${conn.targetRef}\n`;
+          }
+        });
+        
+        mermaid += '  %% Data flows\n';
+        this.connections.forEach(conn => {
+          if (conn.type === 'dataAssociation') {
+            mermaid += `  ${conn.sourceRef} -.-> ${conn.targetRef}\n`;
+          }
+        });
+        
+        return mermaid;
+      }
+    }
+
+    // Test each case
+    function runTest(testNum, bplCode) {
+      try {
+        const parser = new BpmnLiteParser();
+        const ast = parser.parse(bplCode);
+        const mermaidCode = parser.toMermaid();
+        
+        // Display results
+        const outputDiv = document.getElementById(`test${testNum}-output`);
+        outputDiv.innerHTML = `<div class="success">✓ Parsed successfully</div>`;
+        
+        // Show AST connections
+        outputDiv.innerHTML += '<h4>Connections:</h4><pre>' + 
+          JSON.stringify(ast.connections, null, 2) + '</pre>';
+        
+        // Show Mermaid diagram
+        outputDiv.innerHTML += '<h4>Mermaid Diagram:</h4>';
+        const mermaidDiv = document.createElement('div');
+        mermaidDiv.className = 'mermaid';
+        mermaidDiv.textContent = mermaidCode;
+        outputDiv.appendChild(mermaidDiv);
+        
+        // Render with Mermaid
+        mermaid.init(undefined, mermaidDiv);
+        
+      } catch (error) {
+        document.getElementById(`test${testNum}-output`).innerHTML = 
+          `<div class="error">✗ Error: ${error.message}</div>`;
+      }
+    }
+
+    // Run all tests
+    window.onload = function() {
+      const testCases = document.querySelectorAll('.test-case');
+      testCases.forEach((testCase, index) => {
+        const bplCode = testCase.querySelector('.bpl-code').textContent;
+        runTest(index + 1, bplCode);
+      });
+    };
+  </script>
+</body>
+</html>

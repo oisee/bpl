@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Manual Test</title>
+</head>
+<body>
+  <h1>Manual Test - Check Console</h1>
+  <div id="editor" style="display:none"></div>
+  <div id="output" style="display:none"></div>
+  <div id="ast-output" style="display:none"></div>
+  
+  <script src="src/index.html"></script>
+  <script>
+    // Wait for parser to load
+    setTimeout(() => {
+      if (typeof BpmnLiteParser !== 'undefined') {
+        const parser = new BpmnLiteParser();
+        
+        const bpl = `:Process Name
+@Customer
+  place order
+  send: Payment
+  receive: Confirmation
+@System  
+  receive: Payment
+  ?Payment Valid
+    +ship order
+    -cancel order
+  send: Confirmation`;
+        
+        console.log('=== Testing BPL Parser ===');
+        const result = parser.parse(bpl);
+        
+        // Find ship order
+        const shipOrder = Object.values(result.tasks).find(t => 
+          t.name && t.name.toLowerCase().includes('ship order')
+        );
+        
+        if (shipOrder) {
+          console.log('Ship order task:', shipOrder);
+          
+          // Check connections
+          const outgoing = result.connections.filter(c => c.sourceRef === shipOrder.id);
+          console.log('Outgoing connections:', outgoing);
+          
+          outgoing.forEach(conn => {
+            if (conn.sourceRef === conn.targetRef) {
+              console.error('❌ SELF-CONNECTION FOUND!');
+            } else {
+              const target = result.tasks[conn.targetRef];
+              console.log(`✓ Connects to: ${target ? target.name : conn.targetRef}`);
+            }
+          });
+        }
+        
+        // Check all self-connections
+        const selfConns = result.connections.filter(c => c.sourceRef === c.targetRef);
+        if (selfConns.length > 0) {
+          console.error('SELF-CONNECTIONS:', selfConns);
+        } else {
+          console.log('✓ No self-connections found');
+        }
+      } else {
+        console.error('Parser not loaded');
+      }
+    }, 100);
+  </script>
+</body>
+</html>

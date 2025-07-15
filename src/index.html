@@ -295,21 +295,25 @@
           if (parts.length > 1) {
             // Process each part and create the connections
             let prevTaskId = null;
+            let prevOperator = null;
             
             for (let j = 0; j < parts.length; j++) {
-              const part = parts[j].trim();
-              if (!part) continue;
+              const part = parts[j];
+              
+              // Skip operators
+              if (part === '->' || part === '<-') {
+                prevOperator = part;
+                continue;
+              }
               
               // Process this part (pass line number)
-              const taskId = this.processLinePart(part, firstChar, i);
+              const taskId = this.processLinePart(part, part.charAt(0), i);
               
-              // Create connection if we have a previous task
-              if (prevTaskId && taskId) {
-                const connectionType = parts[j-1].includes('<-') ? 'backward' : 'forward';
-                
-                if (connectionType === 'forward') {
+              // Create connection if we have a previous task and operator
+              if (prevTaskId && taskId && prevOperator) {
+                if (prevOperator === '->') {
                   this.addConnection('flow', prevTaskId, taskId);
-                } else {
+                } else if (prevOperator === '<-') {
                   this.addConnection('flow', taskId, prevTaskId);
                 }
               }
@@ -355,15 +359,18 @@
       }
       
       splitConnections(line) {
-        // Split the line at -> and <- operators, preserving the operators
-        const result = [];
+        const parts = [];
         let currentPart = '';
         let i = 0;
         
         while (i < line.length) {
           if (line.substr(i, 2) === '->' || line.substr(i, 2) === '<-') {
-            result.push(currentPart);
-            result.push(line.substr(i, 2));
+            // Add the current part if it exists
+            if (currentPart.trim()) {
+              parts.push(currentPart.trim());
+            }
+            // Add the operator as a separate part
+            parts.push(line.substr(i, 2));
             currentPart = '';
             i += 2;
           } else {
@@ -372,18 +379,9 @@
           }
         }
         
-        if (currentPart) {
-          result.push(currentPart);
-        }
-        
-        // Rejoin into proper parts that maintain the operator with the right part
-        const parts = [];
-        for (let i = 0; i < result.length; i++) {
-          if (result[i] === '->' || result[i] === '<-') {
-            parts[parts.length - 1] += result[i];
-          } else {
-            parts.push(result[i]);
-          }
+        // Add the last part if it exists
+        if (currentPart.trim()) {
+          parts.push(currentPart.trim());
         }
         
         return parts;
@@ -445,27 +443,30 @@
       }
       
       parseEvent(line) {
-        if (!this.currentLane) {
-          // Create a default lane if needed
-          this.parseLane('@Default');
-        }
-        
         const eventName = line.substring(1).trim(); // Remove the ! prefix
-        const laneName = this.currentLane.replace('@', '');
-        const normalizedLaneName = this.normalizeId(laneName);
         let eventType = 'intermediate';
         let eventId;
+        let isProcessLevel = false;
         
         // Determine event type based on common keywords
         if (eventName.toLowerCase() === 'start') {
           eventType = 'start';
           // Start events are process-level, not lane-specific
           eventId = 'process_start';
+          isProcessLevel = true;
         } else if (eventName.toLowerCase() === 'end') {
           eventType = 'end';
           // End events are process-level, not lane-specific
           eventId = 'process_end';
+          isProcessLevel = true;
         } else {
+          // For non-start/end events, we need a lane
+          if (!this.currentLane) {
+            // Create a default lane if needed for intermediate events
+            this.parseLane('@Default');
+          }
+          const laneName = this.currentLane.replace('@', '');
+          const normalizedLaneName = this.normalizeId(laneName);
           // Intermediate events can be lane-specific
           eventId = `${normalizedLaneName}_${this.normalizeId(eventName)}`;
         }
@@ -477,7 +478,7 @@
             eventType: eventType,
             name: eventName,
             id: eventId,
-            lane: eventType === 'start' || eventType === 'end' ? null : laneName // Process-level events have no lane
+            lane: isProcessLevel ? null : this.currentLane.replace('@', '') // Process-level events have no lane
           };
           
           // Track event for special handling
@@ -485,15 +486,18 @@
         }
         
         // For process-level events (Start/End), don't add to lane tasks
-        if (eventType !== 'start' && eventType !== 'end') {
+        if (!isProcessLevel && this.currentLane) {
           this.lanes[this.currentLane].tasks.push(eventId);
         }
         
         // Add event to scope for reference
         const simpleName = this.normalizeId(eventName);
         this.taskScope[simpleName] = eventId;
-        this.taskScope[`${laneName}.${simpleName}`] = eventId;
-        this.taskScope[`@${laneName}.${simpleName}`] = eventId;
+        if (this.currentLane) {
+          const laneName = this.currentLane.replace('@', '');
+          this.taskScope[`${laneName}.${simpleName}`] = eventId;
+          this.taskScope[`@${laneName}.${simpleName}`] = eventId;
+        }
         
         return eventId;
       }
@@ -617,11 +621,20 @@
         }
         
         const parentGateway = this.gatewayStack[this.gatewayStack.length - 1];
-        const branchName = line.substring(1).trim();
+        let branchName = line.substring(1).trim();
         const laneName = this.currentLane.replace('@', '');
         const normalizedLaneName = this.normalizeId(laneName);
         
-        // Check if this is an End event branch
+        // Check if branch contains arrow operators (e.g., "cancel order -> !End")
+        // If so, only use the first part as the branch name
+        if (branchName.includes('->') || branchName.includes('<-')) {
+          const parts = this.splitConnections(branchName);
+          if (parts.length > 0) {
+            branchName = parts[0]; // Use only the first part as branch name
+          }
+        }
+        
+        // Check if this is a direct End event branch (just "!End" or "End")
         if (branchName.toLowerCase() === '!end' || branchName.toLowerCase() === 'end') {
           // Don't create a branch task, connect directly to the process-level end event
           const endEventId = 'process_end';
@@ -1040,26 +1053,12 @@
             this.addConnection('flow', gatewayId, branchId);
           });
           
-          // Handle positive branches - connect to specific targets
+          // Connect positive branches to the next task after the gateway
           data.positive.forEach(branchId => {
             const branch = this.tasks[branchId];
             
-            // Connect to the ship_order task if this is the payment gateway
-            // This is a special case just for the demo example
-            if (gateway.name.toLowerCase().includes('payment')) {
-              const shipOrderTask = Object.values(this.tasks).find(task => 
-                task.lane === gateway.lane && 
-                task.name.toLowerCase().includes('ship order')
-              );
-              
-              if (shipOrderTask) {
-                this.addConnection('flow', branchId, shipOrderTask.id);
-              } else if (data.nextTask) {
-                // Connect to the task after the gateway
-                this.addConnection('flow', branchId, data.nextTask);
-              }
-            } else if (data.nextTask) {
-              // Connect to the task after the gateway
+            // Always connect positive branches to the next task if available
+            if (data.nextTask) {
               this.addConnection('flow', branchId, data.nextTask);
             }
           });
@@ -1243,11 +1242,11 @@
                 const lastTaskInLane = lane.tasks[lane.tasks.length - 1];
                 // If this is the last task in its lane and there's no outgoing connection
                 if (lastTaskInLane === task.id) {
-                  const hasOutgoingConnection = this.connections.some(conn => 
-                    conn.sourceRef === task.id
+                  const hasOutgoingSequenceFlow = this.connections.some(conn => 
+                    conn.sourceRef === task.id && conn.type === 'sequenceFlow'
                   );
                   
-                  if (!hasOutgoingConnection) {
+                  if (!hasOutgoingSequenceFlow) {
                     // Don't check for connection breaks when connecting to process-level End event
                     // The breaks are meant to prevent OTHER cross-lane connections, not End event connections
                     this.addConnection('flow', task.id, 'process_end');

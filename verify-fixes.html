@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Verify Parser Fixes</title>
+  <style>
+    body { font-family: Arial, sans-serif; padding: 20px; }
+    .test { margin: 20px 0; padding: 10px; border: 1px solid #ccc; }
+    .code { background: #f5f5f5; padding: 10px; white-space: pre; font-family: monospace; }
+    .result { margin-top: 10px; }
+    .pass { color: green; }
+    .fail { color: red; }
+  </style>
+</head>
+<body>
+  <h1>Verifying Parser Fixes</h1>
+  
+  <div class="test">
+    <h2>Test 1: Arrow Operator Fix</h2>
+    <div class="code">send: Confirmation -> !End</div>
+    <div class="result" id="test1"></div>
+  </div>
+  
+  <div class="test">
+    <h2>Test 2: Multiple Arrows</h2>
+    <div class="code">Task A -> Task B -> Task C</div>
+    <div class="result" id="test2"></div>
+  </div>
+  
+  <div class="test">
+    <h2>Test 3: Reverse Arrows</h2>
+    <div class="code">Task D <- Task E <- Task F</div>
+    <div class="result" id="test3"></div>
+  </div>
+
+  <script>
+    // Test the splitConnections fix
+    function splitConnections(line) {
+      const parts = [];
+      let currentPart = '';
+      let i = 0;
+      
+      while (i < line.length) {
+        if (line.substr(i, 2) === '->' || line.substr(i, 2) === '<-') {
+          // Add the current part if it exists
+          if (currentPart.trim()) {
+            parts.push(currentPart.trim());
+          }
+          // Add the operator as a separate part
+          parts.push(line.substr(i, 2));
+          currentPart = '';
+          i += 2;
+        } else {
+          currentPart += line[i];
+          i++;
+        }
+      }
+      
+      // Add the last part if it exists
+      if (currentPart.trim()) {
+        parts.push(currentPart.trim());
+      }
+      
+      return parts;
+    }
+    
+    // Test 1
+    const test1Parts = splitConnections('send: Confirmation -> !End');
+    document.getElementById('test1').innerHTML = 
+      `Parts: ${JSON.stringify(test1Parts)}<br>` +
+      (test1Parts.length === 3 && test1Parts[0] === 'send: Confirmation' && test1Parts[1] === '->' && test1Parts[2] === '!End' 
+        ? '<span class="pass">✓ PASS - Correctly split into ["send: Confirmation", "->", "!End"]</span>' 
+        : '<span class="fail">✗ FAIL - Expected ["send: Confirmation", "->", "!End"]</span>');
+    
+    // Test 2
+    const test2Parts = splitConnections('Task A -> Task B -> Task C');
+    document.getElementById('test2').innerHTML = 
+      `Parts: ${JSON.stringify(test2Parts)}<br>` +
+      (test2Parts.length === 5 && test2Parts[0] === 'Task A' && test2Parts[1] === '->' && test2Parts[2] === 'Task B' && test2Parts[3] === '->' && test2Parts[4] === 'Task C'
+        ? '<span class="pass">✓ PASS - Correctly split multiple arrows</span>' 
+        : '<span class="fail">✗ FAIL - Expected ["Task A", "->", "Task B", "->", "Task C"]</span>');
+    
+    // Test 3
+    const test3Parts = splitConnections('Task D <- Task E <- Task F');
+    document.getElementById('test3').innerHTML = 
+      `Parts: ${JSON.stringify(test3Parts)}<br>` +
+      (test3Parts.length === 5 && test3Parts[0] === 'Task D' && test3Parts[1] === '<-' && test3Parts[2] === 'Task E' && test3Parts[3] === '<-' && test3Parts[4] === 'Task F'
+        ? '<span class="pass">✓ PASS - Correctly split reverse arrows</span>' 
+        : '<span class="fail">✗ FAIL - Expected ["Task D", "<-", "Task E", "<-", "Task F"]</span>');
+  </script>
+</body>
+</html>
