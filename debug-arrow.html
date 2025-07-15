@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Debug Arrow Connections</title>
+  <style>
+    body { font-family: Arial, sans-serif; padding: 20px; }
+    .test { margin: 20px 0; padding: 10px; border: 1px solid #ccc; }
+    .result { margin-top: 10px; }
+    pre { background: #f5f5f5; padding: 10px; overflow: auto; }
+  </style>
+</head>
+<body>
+  <h1>Debug Arrow Connection Issue</h1>
+  
+  <div class="test">
+    <h2>Test: kokoko <- @Customer.place order</h2>
+    <div class="result" id="result"></div>
+  </div>
+
+  <script>
+    // Simple test of splitConnections
+    function splitConnections(line) {
+      const parts = [];
+      let currentPart = '';
+      let i = 0;
+      
+      while (i < line.length) {
+        if (line.substr(i, 2) === '->' || line.substr(i, 2) === '<-') {
+          // Add the current part if it exists
+          if (currentPart.trim()) {
+            parts.push(currentPart.trim());
+          }
+          // Add the operator as a separate part
+          parts.push(line.substr(i, 2));
+          currentPart = '';
+          i += 2;
+        } else {
+          currentPart += line[i];
+          i++;
+        }
+      }
+      
+      // Add the last part if it exists
+      if (currentPart.trim()) {
+        parts.push(currentPart.trim());
+      }
+      
+      return parts;
+    }
+    
+    // Test the specific line
+    const testLine = '  kokoko <- @Customer.place order';
+    const parts = splitConnections(testLine);
+    
+    const resultDiv = document.getElementById('result');
+    resultDiv.innerHTML = `
+      <h3>Input line:</h3>
+      <pre>${testLine}</pre>
+      
+      <h3>Split parts:</h3>
+      <pre>${JSON.stringify(parts, null, 2)}</pre>
+      
+      <h3>Analysis:</h3>
+      <ul>
+        <li>Number of parts: ${parts.length}</li>
+        ${parts.map((part, i) => `<li>Part ${i}: "${part}" (is operator: ${part === '->' || part === '<-'})</li>`).join('')}
+      </ul>
+    `;
+    
+    // Additional test cases
+    const testCases = [
+      'kokoko <- @Customer.place order',
+      'Task A -> Task B -> Task C',
+      'place order -> @System.kokoko',
+      'send: Payment -> @System.receive: Payment'
+    ];
+    
+    resultDiv.innerHTML += '<h3>All test cases:</h3>';
+    testCases.forEach(testCase => {
+      const parts = splitConnections(testCase);
+      resultDiv.innerHTML += `
+        <div style="margin: 10px 0; padding: 10px; background: #f9f9f9;">
+          <strong>${testCase}</strong><br>
+          Parts: ${JSON.stringify(parts)}
+        </div>
+      `;
+    });
+  </script>
+</body>
+</html>

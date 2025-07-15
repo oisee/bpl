@@ -1,14 +1,14 @@
 :Process Name
 @Customer
-  place order -> kokoko
+  !Start
+  place order
   send: Payment
   receive: Confirmation
-@System  
+@System
   receive: Payment
   ?Payment Valid
     +ship order
     -cancel order
-  send: Confirmation 
-  kokoko 
+  send: Confirmation
   !End
-
+  

@@ -14,6 +14,9 @@ export class BpmnLiteParser {
     private gatewayStack: string[] = [];
     private connectionBreaks: number[] = [];
     private taskLineNumbers: Record<string, number> = {};
+    private originalText: string = '';
+    private currentLineIndex: number = 0;
+    private endEventLane: string | null = null; // Track which lane contains the !End event
 
     parse(text: string): any {
         // Reset state
@@ -31,6 +34,9 @@ export class BpmnLiteParser {
         this.gatewayStack = [];
         this.connectionBreaks = [];
         this.taskLineNumbers = {};
+        this.originalText = text;
+        this.currentLineIndex = 0;
+        this.endEventLane = null;
 
         const lines = text.split('\n');
         
@@ -39,6 +45,7 @@ export class BpmnLiteParser {
         
         // First pass: collect processes, lanes, and tasks
         for (let i = 0; i < lines.length; i++) {
+            this.currentLineIndex = i;
             const originalLine = lines[i];
             const line = originalLine.trim();
             if (!line) continue; // Skip empty lines
@@ -58,6 +65,7 @@ export class BpmnLiteParser {
             // Check for connected parts with -> or <- operators
             const parts = this.splitConnections(line);
             
+            
             if (parts.length > 1) {
                 // Process each part and create the connections
                 let prevTaskId: string | null = null;
@@ -75,14 +83,12 @@ export class BpmnLiteParser {
                     // Check if this part needs special handling for cross-lane references
                     let taskId: string | null = null;
                     
-                    // If we have a previous operator and this might be a reference to another task
-                    if (prevOperator && !this.isSpecialLine(part)) {
-                        // Try to resolve it as a task reference first
+                    // If we have a previous operator, this is always a reference
+                    if (prevOperator) {
+                        // Always try to resolve it as a task reference
                         taskId = this.resolveTaskId(part, true); // Create if not found
-                    }
-                    
-                    // If not resolved as reference, process normally
-                    if (!taskId) {
+                    } else {
+                        // First part of the line - process normally
                         taskId = this.processLinePart(part, part.charAt(0), i);
                     }
                     
@@ -230,6 +236,8 @@ export class BpmnLiteParser {
             // End events are process-level, not lane-specific
             eventId = 'process_end';
             isProcessLevel = true;
+            // Track which lane contains the End event
+            this.endEventLane = this.currentLane;
         } else {
             // For non-start/end events, we need a lane
             if (!this.currentLane) {
@@ -885,34 +893,29 @@ export class BpmnLiteParser {
             }
         }
         
-        // Handle process-level End event connections (already handled by gateway branches and lane connections)
-        // Process-level End events are connected by:
-        // 1. Gateway branches that end with +!End or -!End
-        // 2. Last tasks in lanes that have !End events
+        // Handle process-level End event connections
+        // Only connect to End event from the lane that contains the !End event
         const processEnd = this.tasks['process_end'];
-        if (processEnd) {
-            // Find tasks that should connect to the process end but aren't already connected
-            Object.values(this.tasks).forEach(task => {
-                if ((task.type === 'task' || task.type === 'send' || task.type === 'receive') && task.lane) {
-                    // Check if this task appears to be a final task in its lane
-                    const lane = this.lanes[`@${task.lane}`];
-                    if (lane && lane.tasks.length > 0) {
-                        const lastTaskInLane = lane.tasks[lane.tasks.length - 1];
-                        // If this is the last task in its lane and there's no outgoing connection
-                        if (lastTaskInLane === task.id) {
-                            const hasOutgoingConnection = this.connections.some(conn => 
-                                conn.sourceRef === task.id
-                            );
-                            
-                            if (!hasOutgoingConnection) {
-                                // Don't check for connection breaks when connecting to process-level End event
-                                // The breaks are meant to prevent OTHER cross-lane connections, not End event connections
-                                this.addConnection('flow', task.id, 'process_end');
-                            }
-                        }
+        if (processEnd && this.endEventLane) {
+            // Find the lane that contains the End event
+            const endLane = this.lanes[this.endEventLane];
+            if (endLane && endLane.tasks.length > 0) {
+                const lastTaskInEndLane = endLane.tasks[endLane.tasks.length - 1];
+                const lastTask = this.tasks[lastTaskInEndLane];
+                
+                // Only connect if it's not a branch or gateway (those have their own connections)
+                if (lastTask && lastTask.type !== 'branch' && lastTask.type !== 'gateway') {
+                    // Check if this task already connects to process_end
+                    const alreadyConnected = this.connections.some(conn => 
+                        conn.sourceRef === lastTaskInEndLane && 
+                        conn.targetRef === 'process_end'
+                    );
+                    
+                    if (!alreadyConnected) {
+                        this.addConnection('flow', lastTaskInEndLane, 'process_end');
                     }
                 }
-            });
+            }
         }
     }
     
@@ -982,6 +985,44 @@ export class BpmnLiteParser {
                 if (this.tasks[directId]) {
                     return directId;
                 }
+                
+                // If not found and createIfNotFound is true, create it in the specified lane
+                if (createIfNotFound) {
+                    // Create the task in the specified lane, not the current lane
+                    const targetLane = `@${lane}`;
+                    let existingLane = this.lanes[targetLane];
+                    
+                    // If the lane doesn't exist, create it
+                    if (!existingLane) {
+                        this.lanes[targetLane] = {
+                            process: this.currentProcess,
+                            tasks: []
+                        };
+                        existingLane = this.lanes[targetLane];
+                    }
+                    
+                    // Create task in the target lane
+                    const taskId = `${normalizedLane}_${normalizedTask}`;
+                    
+                    
+                    this.tasks[taskId] = {
+                        type: 'task',
+                        name: task,
+                        id: taskId,
+                        lane: lane,
+                        implicit: true
+                    };
+                    
+                    // Add to target lane
+                    existingLane.tasks.push(taskId);
+                    
+                    // Add to scope
+                    this.taskScope[normalizedTask] = taskId;
+                    this.taskScope[`${lane}.${normalizedTask}`] = taskId;
+                    this.taskScope[`@${lane}.${normalizedTask}`] = taskId;
+                    
+                    return taskId;
+                }
             }
         }
         
@@ -1016,8 +1057,14 @@ export class BpmnLiteParser {
             }
         }
         
-        // 4. If not found and createIfNotFound is true, create implicit task
+        // 4. If not found and createIfNotFound is true, first check if this task 
+        // will be defined later in the text (forward reference)
         if (createIfNotFound && this.currentLane) {
+            const futureTaskId = this.findFutureTaskDefinition(taskRef);
+            if (futureTaskId) {
+                return futureTaskId;
+            }
+            
             const implicitTaskId = this.createImplicitTask(taskRef);
             return implicitTaskId;
         }
@@ -1037,6 +1084,7 @@ export class BpmnLiteParser {
     }
     
     private createImplicitTask(taskName: string): string {
+        
         if (!this.currentLane) {
             this.parseLane('@Default');
         }
@@ -1044,6 +1092,7 @@ export class BpmnLiteParser {
         const laneName = this.currentLane!.replace('@', '');
         const normalizedLaneName = this.normalizeId(laneName);
         const taskId = `${normalizedLaneName}_${this.normalizeId(taskName)}`;
+        
         
         // Create the implicit task
         this.tasks[taskId] = {
@@ -1064,6 +1113,123 @@ export class BpmnLiteParser {
         this.taskScope[`@${laneName}.${simpleName}`] = taskId;
         
         return taskId;
+    }
+
+    private findFutureTaskDefinition(taskRef: string): string | null {
+        if (!this.originalText) return null;
+        
+        const lines = this.originalText.split('\n');
+        const normalized = this.normalizeId(taskRef);
+        
+        // Look ahead in the text for this task definition
+        for (let i = this.currentLineIndex + 1; i < lines.length; i++) {
+            const line = lines[i].trim();
+            if (!line) continue;
+            
+            // Check if this line defines a new lane
+            if (line.startsWith('@')) {
+                const laneName = line.substring(1).trim();
+                const normalizedLaneName = this.normalizeId(laneName);
+                
+                // Look for task definitions in this lane
+                for (let j = i + 1; j < lines.length; j++) {
+                    const taskLine = lines[j].trim();
+                    if (!taskLine) continue;
+                    
+                    // Stop if we hit another lane or process definition
+                    if (taskLine.startsWith('@') || taskLine.startsWith(':')) {
+                        break;
+                    }
+                    
+                    // Skip special lines
+                    if (taskLine.startsWith('?') || taskLine.startsWith('+') || 
+                        taskLine.startsWith('-') || taskLine.startsWith('!') ||
+                        taskLine.startsWith('#') || taskLine.startsWith('"') ||
+                        taskLine.startsWith('^') || taskLine.startsWith('//')) {
+                        continue;
+                    }
+                    
+                    // Extract task name (handle arrows)
+                    let taskName = taskLine;
+                    if (taskLine.includes('->') || taskLine.includes('<-')) {
+                        // For lines with arrows, we need to check each part
+                        const parts = this.splitConnections(taskLine);
+                        for (const part of parts) {
+                            if (part !== '->' && part !== '<-') {
+                                if (this.normalizeId(part) === normalized) {
+                                    // Found the task! Create it in the future lane
+                                    const futureTaskId = `${normalizedLaneName}_${normalized}`;
+                                    
+                                    // Ensure the lane exists
+                                    const futureLane = `@${laneName}`;
+                                    if (!this.lanes[futureLane]) {
+                                        this.lanes[futureLane] = {
+                                            process: this.currentProcess,
+                                            tasks: []
+                                        };
+                                    }
+                                    
+                                    // Create the task if it doesn't exist
+                                    if (!this.tasks[futureTaskId]) {
+                                        this.tasks[futureTaskId] = {
+                                            type: 'task',
+                                            name: part,
+                                            id: futureTaskId,
+                                            lane: laneName,
+                                            implicit: false // This is a real task definition
+                                        };
+                                        
+                                        // Don't add to lane.tasks here - it will be added when the line is actually processed
+                                        // Just add to scope so it can be resolved
+                                        this.taskScope[normalized] = futureTaskId;
+                                        this.taskScope[`${laneName}.${normalized}`] = futureTaskId;
+                                        this.taskScope[`@${laneName}.${normalized}`] = futureTaskId;
+                                    }
+                                    
+                                    return futureTaskId;
+                                }
+                            }
+                        }
+                    } else {
+                        // Simple task line
+                        if (this.normalizeId(taskName) === normalized) {
+                            // Found the task! Create it in the future lane
+                            const futureTaskId = `${normalizedLaneName}_${normalized}`;
+                            
+                            // Ensure the lane exists
+                            const futureLane = `@${laneName}`;
+                            if (!this.lanes[futureLane]) {
+                                this.lanes[futureLane] = {
+                                    process: this.currentProcess,
+                                    tasks: []
+                                };
+                            }
+                            
+                            // Create the task if it doesn't exist
+                            if (!this.tasks[futureTaskId]) {
+                                this.tasks[futureTaskId] = {
+                                    type: 'task',
+                                    name: taskName,
+                                    id: futureTaskId,
+                                    lane: laneName,
+                                    implicit: false // This is a real task definition
+                                };
+                                
+                                // Don't add to lane.tasks here - it will be added when the line is actually processed
+                                // Just add to scope so it can be resolved
+                                this.taskScope[normalized] = futureTaskId;
+                                this.taskScope[`${laneName}.${normalized}`] = futureTaskId;
+                                this.taskScope[`@${laneName}.${normalized}`] = futureTaskId;
+                            }
+                            
+                            return futureTaskId;
+                        }
+                    }
+                }
+            }
+        }
+        
+        return null;
     }
 
     private normalizeId(name: string): string {

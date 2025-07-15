@@ -265,6 +265,9 @@
         this.gatewayStack = [];
         this.connectionBreaks = [];
         this.taskLineNumbers = {};
+        this.originalText = text;
+        this.currentLineIndex = 0;
+        this.endEventLane = null;
 
         const lines = text.split('\n');
         
@@ -273,6 +276,7 @@
         
         // First pass: collect processes, lanes, and tasks
         for (let i = 0; i < lines.length; i++) {
+          this.currentLineIndex = i;
           const originalLine = lines[i];
           const line = originalLine.trim();
           if (!line) continue; // Skip empty lines
@@ -1288,17 +1292,14 @@
         if (!taskRef) return null;
         
         taskRef = taskRef.trim();
-        console.log(`Resolving task ID for: "${taskRef}"`);
         
         // 1. Check direct scope lookup
         if (this.taskScope[taskRef]) {
-          console.log(`  Direct lookup success: ${this.taskScope[taskRef]}`);
           return this.taskScope[taskRef];
         }
         
         const normalized = this.normalizeId(taskRef);
         if (this.taskScope[normalized]) {
-          console.log(`  Normalized lookup success: ${this.taskScope[normalized]}`);
           return this.taskScope[normalized];
         }
         
@@ -1330,15 +1331,50 @@
             
             for (const lookup of lookups) {
               if (this.taskScope[lookup]) {
-                console.log(`  Complex lookup success: ${this.taskScope[lookup]} (via ${lookup})`);
                 return this.taskScope[lookup];
               }
             }
             
             const directId = `${normalizedLane}_${normalizedTask}`;
             if (this.tasks[directId]) {
-              console.log(`  Direct ID lookup success: ${directId}`);
               return directId;
+            }
+            
+            // If not found and createIfNotFound is true, create it in the specified lane
+            if (createIfNotFound) {
+              // Create the task in the specified lane, not the current lane
+              const targetLane = `@${lane}`;
+              let existingLane = this.lanes[targetLane];
+              
+              // If the lane doesn't exist, create it
+              if (!existingLane) {
+                this.lanes[targetLane] = {
+                  process: this.currentProcess,
+                  tasks: []
+                };
+                existingLane = this.lanes[targetLane];
+              }
+              
+              // Create task in the target lane
+              const taskId = `${normalizedLane}_${normalizedTask}`;
+              
+              this.tasks[taskId] = {
+                type: 'task',
+                name: task,
+                id: taskId,
+                lane: lane,
+                implicit: true
+              };
+              
+              // Add to target lane
+              existingLane.tasks.push(taskId);
+              
+              // Add to scope
+              this.taskScope[normalizedTask] = taskId;
+              this.taskScope[`${lane}.${normalizedTask}`] = taskId;
+              this.taskScope[`@${lane}.${normalizedTask}`] = taskId;
+              
+              return taskId;
             }
           }
         }
@@ -1352,7 +1388,6 @@
           const currentLaneName = this.currentLane.replace('@', '');
           const taskInCurrentLane = this.findTaskInLane(currentLaneName, normalized);
           if (taskInCurrentLane) {
-            console.log(`  Found in current lane: ${taskInCurrentLane.id}`);
             return taskInCurrentLane.id;
           }
         }
@@ -1362,7 +1397,6 @@
           const laneName = allLaneNames[i].replace('@', '');
           const task = this.findTaskInLane(laneName, normalized);
           if (task) {
-            console.log(`  Found in previous lane ${laneName}: ${task.id}`);
             return task.id;
           }
         }
@@ -1372,7 +1406,6 @@
           const laneName = allLaneNames[i].replace('@', '');
           const task = this.findTaskInLane(laneName, normalized);
           if (task) {
-            console.log(`  Found in subsequent lane ${laneName}: ${task.id}`);
             return task.id;
           }
         }
@@ -1380,11 +1413,9 @@
         // 4. If not found and createIfNotFound is true, create implicit task
         if (createIfNotFound && this.currentLane) {
           const implicitTaskId = this.createImplicitTask(taskRef);
-          console.log(`  Created implicit task: ${implicitTaskId}`);
           return implicitTaskId;
         }
         
-        console.log(`  Resolution failed for: "${taskRef}"`);
         return null;
       }
       

@@ -24,8 +24,20 @@ console.log(`Version bumped from ${major}.${minor}.${patch} to ${newVersion}`);
 console.log('Compiling TypeScript...');
 try {
   execSync('npm run compile', { stdio: 'inherit', cwd: path.join(__dirname, '..') });
-  console.log('Build completed successfully!');
+  console.log('TypeScript compilation completed!');
 } catch (error) {
-  console.error('Build failed:', error.message);
+  console.error('TypeScript compilation failed:', error.message);
   process.exit(1);
 }
+
+// Package the extension
+console.log('Packaging VSCode extension...');
+try {
+  execSync('npm run package', { stdio: 'inherit', cwd: path.join(__dirname, '..') });
+  console.log('Extension packaged successfully!');
+} catch (error) {
+  console.error('Extension packaging failed:', error.message);
+  process.exit(1);
+}
+
+console.log('Build completed successfully!');

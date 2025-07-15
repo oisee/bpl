@@ -2,7 +2,7 @@
   "name": "bpmn-lite",
   "displayName": "BPMN-Lite",
   "description": "Live preview for BPMN-Lite DSL with syntax highlighting and real-time diagram rendering",
-  "version": "0.4.9",
+  "version": "0.4.26",
   "publisher": "bpmn-lite",
   "repository": {
     "type": "git",
@@ -137,7 +137,12 @@
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
     "build": "node scripts/build.js",
-    "package": "vsce package"
+    "package": "vsce package",
+    "test": "node test/test-suite.js",
+    "test:verbose": "node test/test-suite.js --verbose",
+    "test:scenarios": "node test/test-reference-scenarios.js",
+    "test:end": "node test/test-end-regression.js",
+    "test:inventory": "node test/inventory.js"
   },
   "devDependencies": {
     "@types/vscode": "^1.74.0",
