@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { BpmnLiteParser } from './parser';
+import * as sharp from 'sharp';
 
 export class BpmnLitePreviewPanel {
     public static currentPanel: BpmnLitePreviewPanel | undefined;
@@ -611,25 +612,33 @@ export class BpmnLitePreviewPanel {
             .replace(/'/g, "&#039;");
     }
 
+    private getDefaultExportPath(extension: string): vscode.Uri {
+        const activeEditor = vscode.window.activeTextEditor;
+        if (activeEditor && activeEditor.document.languageId === 'bpmn-lite') {
+            const bplPath = activeEditor.document.fileName;
+            const baseName = bplPath.replace(/\.bpl$/, '');
+            return vscode.Uri.file(`${baseName}.${extension}`);
+        }
+        return vscode.Uri.file(`diagram.${extension}`);
+    }
+
     private async _exportPNG(svgData: string, dpi: number) {
         try {
             const saveUri = await vscode.window.showSaveDialog({
-                defaultUri: vscode.Uri.file('diagram.png'),
+                defaultUri: this.getDefaultExportPath('png'),
                 filters: { 'PNG Image': ['png'] }
             });
             
             if (!saveUri) return;
             
-            // For now, we'll save the SVG and inform the user about PNG conversion
-            // In a real implementation, we'd use a library like sharp or canvas
-            vscode.window.showInformationMessage(
-                `PNG export requires additional libraries. SVG saved instead. You can convert it using online tools with ${dpi} DPI.`
-            );
+            // Convert SVG to PNG using sharp
+            const density = Math.round(dpi); // DPI for sharp
+            const pngBuffer = await sharp(Buffer.from(svgData, 'utf8'), { density })
+                .png()
+                .toBuffer();
             
-            // Save as SVG for now
-            const svgContent = svgData;
-            await vscode.workspace.fs.writeFile(saveUri.with({ path: saveUri.path.replace('.png', '.svg') }), 
-                Buffer.from(svgContent, 'utf8'));
+            await vscode.workspace.fs.writeFile(saveUri, pngBuffer);
+            vscode.window.showInformationMessage(`PNG exported successfully with ${dpi} DPI!`);
         } catch (error: any) {
             vscode.window.showErrorMessage(`Failed to export PNG: ${error.message}`);
         }
@@ -638,7 +647,7 @@ export class BpmnLitePreviewPanel {
     private async _exportSVG(svgData: string) {
         try {
             const saveUri = await vscode.window.showSaveDialog({
-                defaultUri: vscode.Uri.file('diagram.svg'),
+                defaultUri: this.getDefaultExportPath('svg'),
                 filters: { 'SVG Image': ['svg'] }
             });
             
@@ -654,7 +663,7 @@ export class BpmnLitePreviewPanel {
     private async _exportMermaid(mermaidCode: string) {
         try {
             const saveUri = await vscode.window.showSaveDialog({
-                defaultUri: vscode.Uri.file('diagram.mmd'),
+                defaultUri: this.getDefaultExportPath('mmd'),
                 filters: { 'Mermaid Diagram': ['mmd', 'mermaid'] }
             });
             
@@ -670,7 +679,7 @@ export class BpmnLitePreviewPanel {
     private async _exportXLSX(ast: any) {
         try {
             const saveUri = await vscode.window.showSaveDialog({
-                defaultUri: vscode.Uri.file('diagram.xlsx'),
+                defaultUri: this.getDefaultExportPath('xlsx'),
                 filters: { 'Excel Workbook': ['xlsx'] }
             });
             
@@ -691,7 +700,7 @@ export class BpmnLitePreviewPanel {
     private async _exportBPMN(ast: any) {
         try {
             const saveUri = await vscode.window.showSaveDialog({
-                defaultUri: vscode.Uri.file('diagram.bpmn'),
+                defaultUri: this.getDefaultExportPath('bpmn'),
                 filters: { 'BPMN 2.0': ['bpmn', 'xml'] }
             });
             

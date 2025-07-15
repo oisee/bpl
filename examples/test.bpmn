@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+                  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+                  xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+                  xmlns:camunda="http://camunda.org/schema/1.0/bpmn"
+                  id="Definitions_1" targetNamespace="http://bpmn.io/schema/bpmn">
+  <bpmn:process id="default_process" name="Default Process" isExecutable="true">
+    <bpmn:sequenceFlow id="conn_customer_place_order_customer_send_payment" sourceRef="customer_place_order" targetRef="customer_send_payment" />
+    <bpmn:sequenceFlow id="conn_customer_send_payment_customer_receive_confirmation" sourceRef="customer_send_payment" targetRef="customer_receive_confirmation" />
+    <bpmn:sequenceFlow id="conn_system_receive_payment_system_payment_valid" sourceRef="system_receive_payment" targetRef="system_payment_valid" />
+    <bpmn:sequenceFlow id="conn_system_receive_payment_system_send_confirmation" sourceRef="system_receive_payment" targetRef="system_send_confirmation" />
+    <bpmn:sequenceFlow id="conn_system_payment_valid_system_ship_order" sourceRef="system_payment_valid" targetRef="system_ship_order" />
+    <bpmn:sequenceFlow id="conn_system_payment_valid_system_cancel_order" sourceRef="system_payment_valid" targetRef="system_cancel_order" />
+    <bpmn:sequenceFlow id="conn_system_ship_order_system_send_confirmation" sourceRef="system_ship_order" targetRef="system_send_confirmation" />
+    <bpmn:sequenceFlow id="conn_customer_receive_confirmation_system_receive_payment" sourceRef="customer_receive_confirmation" targetRef="system_receive_payment" />
+    <bpmn:sequenceFlow id="conn_process_start_customer_place_order" sourceRef="process_start" targetRef="customer_place_order" />
+    <bpmn:sequenceFlow id="conn_system_send_confirmation_process_end" sourceRef="system_send_confirmation" targetRef="process_end" />
+  </bpmn:process>
+  <bpmn:process id="process_name" name="Process Name" isExecutable="true">
+    <bpmn:task id="customer_place_order" name="place order" />
+    <bpmn:sendTask id="customer_send_payment" name="send: Payment" />
+    <bpmn:receiveTask id="customer_receive_confirmation" name="receive: Confirmation" />
+    <bpmn:receiveTask id="system_receive_payment" name="receive: Payment" />
+    <bpmn:exclusiveGateway id="system_payment_valid" name="Payment Valid" />
+    <bpmn:sendTask id="system_send_confirmation" name="send: Confirmation" />
+    <bpmn:sequenceFlow id="conn_customer_place_order_customer_send_payment" sourceRef="customer_place_order" targetRef="customer_send_payment" />
+    <bpmn:sequenceFlow id="conn_customer_send_payment_customer_receive_confirmation" sourceRef="customer_send_payment" targetRef="customer_receive_confirmation" />
+    <bpmn:sequenceFlow id="conn_system_receive_payment_system_payment_valid" sourceRef="system_receive_payment" targetRef="system_payment_valid" />
+    <bpmn:sequenceFlow id="conn_system_receive_payment_system_send_confirmation" sourceRef="system_receive_payment" targetRef="system_send_confirmation" />
+    <bpmn:sequenceFlow id="conn_system_payment_valid_system_ship_order" sourceRef="system_payment_valid" targetRef="system_ship_order" />
+    <bpmn:sequenceFlow id="conn_system_payment_valid_system_cancel_order" sourceRef="system_payment_valid" targetRef="system_cancel_order" />
+    <bpmn:sequenceFlow id="conn_system_ship_order_system_send_confirmation" sourceRef="system_ship_order" targetRef="system_send_confirmation" />
+    <bpmn:sequenceFlow id="conn_customer_receive_confirmation_system_receive_payment" sourceRef="customer_receive_confirmation" targetRef="system_receive_payment" />
+    <bpmn:sequenceFlow id="conn_process_start_customer_place_order" sourceRef="process_start" targetRef="customer_place_order" />
+    <bpmn:sequenceFlow id="conn_system_send_confirmation_process_end" sourceRef="system_send_confirmation" targetRef="process_end" />
+  </bpmn:process>
+  <bpmn:messageFlow id="conn_customer_send_payment_system_receive_payment" sourceRef="customer_send_payment" targetRef="system_receive_payment" name="Payment" />
+  <bpmn:messageFlow id="conn_system_send_confirmation_customer_receive_confirmation" sourceRef="system_send_confirmation" targetRef="customer_receive_confirmation" name="Confirmation" />
+</bpmn:definitions>

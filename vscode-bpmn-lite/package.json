@@ -2,7 +2,7 @@
   "name": "bpmn-lite",
   "displayName": "BPMN-Lite",
   "description": "Live preview for BPMN-Lite DSL with syntax highlighting and real-time diagram rendering",
-  "version": "0.4.26",
+  "version": "0.4.27",
   "publisher": "bpmn-lite",
   "repository": {
     "type": "git",
@@ -150,5 +150,7 @@
     "typescript": "^4.9.3",
     "vsce": "^2.15.0"
   },
-  "dependencies": {}
+  "dependencies": {
+    "sharp": "^0.32.0"
+  }
 }

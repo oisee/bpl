@@ -43,7 +43,7 @@ export function activate(context: vscode.ExtensionContext) {
                 const mermaid = parser.toMermaid();
 
                 const uri = await vscode.window.showSaveDialog({
-                    defaultUri: vscode.Uri.file(document.fileName.replace('.bpl', '.mmd')),
+                    defaultUri: vscode.Uri.file(document.fileName.replace(/\.bpl$/, '.mmd')),
                     filters: {
                         'Mermaid': ['mmd', 'mermaid']
                     }
@@ -79,7 +79,7 @@ export function activate(context: vscode.ExtensionContext) {
                 const ast = parser.parse(content);
 
                 const uri = await vscode.window.showSaveDialog({
-                    defaultUri: vscode.Uri.file(document.fileName.replace('.bpl', '-ast.json')),
+                    defaultUri: vscode.Uri.file(document.fileName.replace(/\.bpl$/, '-ast.json')),
                     filters: {
                         'JSON': ['json']
                     }
