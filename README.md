@@ -106,9 +106,48 @@ cd tools
 pip install -r requirements.txt
 ```
 
-## 📖 DSL Quick Reference
+## 📖 BPMN-lite DSL Specification
 
-### Core Elements
+### Purpose
+
+A minimal, intuitive domain-specific language for describing business process diagrams that can be rendered to both BPMN and Mermaid formats. The DSL prioritizes simplicity, readability, and expressiveness while minimizing syntax overhead.
+
+### Core Design Principles
+
+- Prefix-based syntax for clear visual distinction
+- No brackets, quotes or closing tags needed (except for parallel flows and decision labels)
+- Intuitive character choices for each element type
+- Support for all essential BPMN elements
+- Easy to write by hand and parse programmatically
+- Whitespace-insensitive parsing (indentation for readability only)
+
+### Prefix Symbol Reference
+
+|Symbol|BPMN Element|Rationale|
+|---|---|---|
+|`:`|Process definition|Resembles a label marker, common in many domain languages|
+|`@`|Lane/Pool|Represents "at" or "location", indicating where tasks occur|
+|`->`|Flow connector|Universal directional arrow symbol|
+|`<-`|Incoming flow connector|Reverse arrow showing connection from another task|
+|`?`|XOR Gateway|Question mark naturally represents decision points|
+|`+`|Positive/Named branch|Plus sign represents an explicit path in a gateway|
+|`-`|Negative/Else branch|Minus sign represents fallback or else path|
+|`{`|Start parallel/inclusive|Opening bracket suggests the beginning of a grouped section|
+|`}`|End parallel/inclusive|Closing bracket naturally pairs with opening bracket|
+|`=`|Parallel (AND) branch|Equal signs visually represent parallel tracks|
+|`~`|Inclusive (OR) branch|Tilde suggests "approximately" or optionality|
+|`[` `]`|Subprocess|Square brackets suggest a contained/nested process|
+|`!`|Events|Exclamation mark draws attention to significant events|
+|`^`|Message flow|Caret suggests sending/transmitting information|
+|`#`|Data object|Resembles a document or container|
+|`$`|Data store|Dollar sign represents persistent/valuable data|
+|`"`|Diagram comment|Quotation mark is intuitive for visible commentary|
+|`//`|Technical comment|Standard comment syntax in many programming languages|
+|`---`|Lane boundary marker|Prevents automatic flow connection between lanes|
+
+### DSL Quick Reference
+
+#### Core Elements
 
 | Syntax | Element | Description |
 |--------|---------|-------------|
@@ -120,7 +159,7 @@ pip install -r requirements.txt
 | `-choice` | Negative Branch | No/False path |
 | `!Start` / `!End` | Events | Process start/end points |
 
-### Communication
+#### Communication
 
 | Syntax | Element | Description |
 |--------|---------|-------------|
@@ -128,7 +167,7 @@ pip install -r requirements.txt
 | `receive: Message` | Receive Task | Wait for a message |
 | `^Flow @A.task -> @B.task` | Message Flow | Explicit connection |
 
-### Data & Annotations
+#### Data & Annotations
 
 | Syntax | Element | Description |
 |--------|---------|-------------|
@@ -149,6 +188,441 @@ pip install -r requirements.txt
 task A -> task C  # Skip task B
 task D <- task B  # Reverse arrow
 ```
+
+## Syntax Reference
+
+### Process Definition
+
+```
+:Process Name
+```
+
+### Lanes/Pools
+
+```
+@Lane Name
+  task 1
+  task 2
+```
+
+### Tasks
+
+- Simple text lines after lane definition
+- Tasks are automatically connected in sequence within the same lane
+- Explicit connections can be made using `->` or `<-`:
+    
+    ```
+    task A -> task C  // Creates direct flow from A to C
+    task C <- task A  // Alternate syntax, same effect as above
+    task A -> task C -> task E  // Creates chained connections
+    ```
+
+### Task Name Resolution
+
+For task references without lane prefixes, the parser searches in this order:
+
+1. **Current lane first** - searches for the task name in the current lane
+2. **Previous lanes (bottom-up)** - searches lanes defined before the current lane, from most recent to oldest
+3. **Forward search (top-down)** - searches from current position to end of process definition
+
+Examples:
+
+```
+@Customer
+  place order -> validate order  // Forward reference, found in Validation lane
+  receive confirmation
+
+@Validation  
+  validate order                 // Referenced from Customer lane
+  check inventory -> update stock // Forward reference to Warehouse lane
+
+@Warehouse
+  update stock                   // Referenced from Validation lane
+  prepare shipment -> place order // Backward reference to Customer lane
+```
+
+### Lane Boundary Marker
+
+Use `---` to prevent automatic flow connection between lanes:
+
+```
+@Lane1
+  task A
+  task B
+  ---  // Prevents auto-connection to next lane
+
+@Lane2  
+  task C  // Not connected to task B due to boundary marker
+  task D
+```
+
+### Gateways
+
+#### XOR Gateways (Exclusive Decision)
+
+XOR gateways can be defined in two ways:
+
+**Inline form (simple decisions):**
+
+```
+?Decision Point
+  +yes path
+  -no path
+next task  // First + path connects here
+```
+
+**Block form (consistent with other gateways):**
+
+```
+{?Decision Point
+  +yes path
+  -no path
+}Decision Complete
+next task  // First + path connects here
+```
+
+For multi-branch decisions:
+
+```
+{?Payment Method
+  +Credit Card
+  +PayPal
+  +Bank Transfer
+  -Cancel
+}Payment Method Selected
+process payment  // Only first + path (Credit Card) connects here
+```
+
+#### XOR Gateway Connection Rules
+
+1. **Default Behavior**:
+    - First `+` path: Automatically connects to the next task after the decision
+    - Additional `+` paths: Must be explicitly connected
+    - `-` path: Must be explicitly connected
+2. **Explicit Connections**:
+    
+    ```
+    {?Payment Method
+      +Credit Card  // Auto-connects to "process payment"
+      +PayPal -> special PayPal process
+      +Bank Transfer -> bank verification
+      -Cancel -> cleanup process
+    }Payment Method Selected
+    process payment  // Only receives flow from Credit Card
+    ```
+
+#### Parallel Gateways (AND)
+
+Parallel gateways use `{` prefix for splits and `}` suffix for joins. Branches use `=` prefix:
+
+```
+{Parallel Process
+  =path 1
+  =path 2
+  =path 3
+}Join Gate
+next task  // All = paths connect here
+```
+
+#### Inclusive Gateways (OR)
+
+Similar to parallel gateways, but branches use `~` prefix:
+
+```
+{Optional Steps
+  ~option 1
+  ~option 2
+  ~option 3
+}Choices Complete
+next task  // All ~ paths connect here
+```
+
+#### Gateway Connection Summary
+
+|Gateway Type|Inline|Block Form|First Branch|Other Branches|
+|---|---|---|---|---|
+|XOR|`?`|`{?` `}`|Auto-connects|Explicit only|
+|AND|N/A|`{=` `}`|Auto-connects|Auto-connects|
+|OR|N/A|`{~` `}`|Auto-connects|Auto-connects|
+
+#### Decision Label Overrides
+
+Use quotes to override default decision labels:
+
+```
+{?International shipping
+  + "yes" prepare customs documents
+  - "no" use domestic shipping
+}Shipping Decision Complete
+
+{?Payment Method
+  + "Credit" process credit card
+  + "Debit" process debit card  
+  - "Cash" handle cash payment
+}Payment Method Selected
+```
+
+#### Mixed Gateway Types
+
+Mixed prefixes can be used within a single block. The parser will automatically generate the appropriate nested gateway structure:
+
+```
+{Payment Processing
+  =Record Transaction       // AND branch
+  =Update Inventory        // AND branch
+  +Credit Card Processing  // XOR option
+  +Bank Transfer          // XOR option
+  -Manual Payment         // XOR fallback
+  ~Send Receipt          // OR branch
+  ~Send Notification     // OR branch
+}Payment Complete
+```
+
+### Cross-Lane References
+
+Tasks in other lanes can be referenced using the lane name:
+
+```
+@Lane 01
+  task A
+  task B -> @Lane 02.specific task
+
+@Lane 02
+  task X
+  specific task
+  task Y <- @Lane 01.task A
+```
+
+### Subprocesses
+
+Collapsed form:
+
+```
+[subprocess name]
+```
+
+Expanded form (shows internal structure):
+
+```
+[subprocess name]+
+```
+
+Subprocess definition:
+
+```
+:Main Process
+@Lane 1
+  task 1
+  [handle payment]
+  task 3
+
+:handle payment
+@Payment Lane
+  validate card
+  process transaction
+```
+
+### Events
+
+All events use the `!` prefix followed by the event type:
+
+#### Start and End Events
+
+```
+!start
+!start Begin process
+!end
+!end Complete process
+```
+
+Default behavior:
+
+- If not specified, `!start` is added to the first task in the first lane
+- If not specified, `!end` is added after the last task in the last lane
+- Can be explicitly placed anywhere to override defaults
+
+#### Intermediate Events
+
+```
+!message Receive confirmation
+!timer Wait 24 hours
+!error Handle timeout
+!signal Process triggered
+!send Order Request
+!receive Order Confirmation
+```
+
+### Message Flows
+
+#### Position-Based (Implicit)
+
+```
+@Customer
+  place order
+  ^Order Confirmation
+  receive confirmation
+```
+
+#### Direction-Based (Explicit)
+
+```
+^Order Details -> @Sales.process order
+^Payment Confirmation <- @Finance.payment processed
+```
+
+#### Automatic Connection
+
+Tasks with `!send` and `!receive` events are automatically connected:
+
+```
+@Customer
+  !send Order Request
+
+@System
+  !receive Order Request  // Auto-connected from Customer
+```
+
+### Data Objects and Stores
+
+#### Data Objects
+
+```
+#Order Data
+#Customer Info -> process order
+#Invoice <- generate invoice
+```
+
+#### Data Stores (Persistent)
+
+```
+$Customer Database
+$Order History -> retrieve past orders
+```
+
+#### Position-Based Data Flow
+
+```
+validate order
+#Order Details
+process payment  // Connected via Order Details
+```
+
+### Comments
+
+#### Visible Comments (appear in diagram)
+
+```
+"This comment will appear in the diagram
+"Multi-line comments<br/>use HTML line breaks
+```
+
+#### Technical Comments (hidden)
+
+```
+// This comment won't appear in the diagram
+task A // This is also hidden
+```
+
+## Parsing Rules
+
+1. First non-whitespace character determines line type
+2. Whitespace is ignored for parsing - indentation is purely for readability
+3. Standard pretty-printing uses:
+    - Process and lane declarations: column 0
+    - Tasks and gateways: indent 2 spaces
+    - Gateway branches: indent 4 spaces (additional 2)
+    - Nested elements: add 2 spaces per level
+4. Empty lines are ignored
+5. Tasks in sequence are automatically connected unless separated by `---`
+6. Task name resolution follows: current lane → previous lanes (bottom-up) → forward search (top-down)
+7. Cross-lane references use `@LaneName.taskName` syntax for explicit lane targeting
+8. Gateway branches follow connection rules based on gateway type
+9. Mixed gateway types within a block are automatically structured
+
+## Complete Example
+
+```
+:Order Fulfillment Process
+
+@Customer
+  browse products
+  add to cart
+  {?Ready to purchase
+    + "Yes" proceed to checkout
+    - "No" save cart -> !end Exit
+  }Purchase Decision Complete
+  checkout
+  [customer authentication]
+  provide shipping address
+  {?Express delivery
+    + "Express" select express shipping
+    - "Standard" select standard shipping
+  }Delivery Option Selected
+  complete payment
+  !send Order Submission
+  !timer Wait for confirmation
+  !receive Order Confirmation
+  "Customer receives confirmation<br/>and tracking information"
+  ---
+
+@OrderSystem  
+  !receive Order Submission
+  #Order Data
+  validate order
+  process payment
+  {?Payment successful
+    + "Approved" update order status
+    + "Partial" request additional payment -> complete payment
+    - "Declined" cancel order -> !send Order Cancelled
+  }Payment Processing Complete
+  {Process Order
+    =update inventory
+    =generate invoice
+    =[prepare shipment]+
+  }Order Processing Complete
+  !send Order Confirmation
+  $Order Database
+  ---
+
+@Warehouse
+  !receive Shipment Request
+  pick items
+  pack order
+  {Shipping Options
+    ~add insurance
+    ~add tracking
+  }Shipping Options Complete
+  ship package
+  ^Shipment Complete -> update order status
+
+:customer authentication
+@Security
+  {?Have account
+    + "Yes" login
+    - "No" register
+  }Authentication Method Selected
+  verify identity
+  
+:prepare shipment  
+@Shipping
+  calculate costs
+  select carrier
+  generate label
+```
+
+## Best Practices
+
+1. Use clear, descriptive task names
+2. Keep lane names concise but meaningful
+3. Use explicit connections for clarity in complex flows
+4. Group related tasks within lanes
+5. Use comments to explain business rules
+6. Define subprocesses for reusable components
+7. Use `---` to clearly separate independent process sections
+8. Rely on automatic task name resolution for cleaner syntax
+9. Use explicit lane references (`@LaneName.taskName`) only when automatic resolution is ambiguous
+10. Use block form for gateways when consistency is important or when dealing with complex multi-branch decisions
+11. Use inline form for simple binary XOR decisions when brevity is preferred
 
 ## Examples
 
@@ -1318,11 +1792,11 @@ BPMN-Lite is built on Domain-Driven Design principles:
 
 ### Internal Documentation & Articles
 
-- **[Architecture Decision Records](GEMINI.md)** - Key architectural decisions and rationale
-- **[Camunda Integration Proposal](CAMUNDA-PROPOSAL.md)** - Vision for enterprise BPMN platform integration
-- **[Development Guide](GUIDE.md)** - Comprehensive guide for contributors
-- **[Implementation Plan](implementation_plan.md)** - Technical roadmap and design patterns
-- **[Improvements Plan](improvements_plan.md)** - Future enhancements and optimizations
+- **[Architecture Decision Records](007_GEMINI.md)** - Key architectural decisions and rationale
+- **[Camunda Integration Proposal](010_CAMUNDA-PROPOSAL.md)** - Vision for enterprise BPMN platform integration
+- **[Development Guide](009_GUIDE.md)** - Comprehensive guide for contributors
+- **[Implementation Plan](002_implementation_plan.md)** - Technical roadmap and design patterns
+- **[Improvements Plan](003_improvements_plan.md)** - Future enhancements and optimizations
 - **[Testing Documentation](vscode-bpmn-lite/TESTING.md)** - Test strategies and scenarios
 
 ### Design Philosophy
@@ -1355,7 +1829,7 @@ BPMN-Lite follows these core principles:
 - **Discord**: Real-time chat (coming soon)
 
 ### Tutorials & Examples
-- [Getting Started Guide](GUIDE.md)
+- [Getting Started Guide](009_GUIDE.md)
 - [Example Processes](examples/)
 - [Video Tutorials](https://youtube.com/bpmn-lite) (coming soon)
 - [Interactive Playground](https://bpmn-lite.io/playground) (coming soon)
