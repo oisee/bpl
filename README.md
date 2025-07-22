@@ -28,6 +28,8 @@ Stop wrestling with complex diagramming tools! BPMN-Lite lets you describe busin
 
 **↓ Instantly becomes ↓**
 
+![demo.gif](demo.gif)
+
 A beautiful, interactive BPMN diagram!
 
 ## ✨ Key Features
