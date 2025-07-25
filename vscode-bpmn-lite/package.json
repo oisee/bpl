@@ -2,7 +2,7 @@
   "name": "bpmn-lite",
   "displayName": "BPMN-Lite",
   "description": "Live preview for BPMN-Lite DSL with syntax highlighting and real-time diagram rendering",
-  "version": "0.4.27",
+  "version": "0.4.30",
   "publisher": "bpmn-lite",
   "repository": {
     "type": "git",
@@ -145,8 +145,9 @@
     "test:inventory": "node test/inventory.js"
   },
   "devDependencies": {
-    "@types/vscode": "^1.74.0",
     "@types/node": "16.x",
+    "@types/sharp": "^0.31.1",
+    "@types/vscode": "^1.74.0",
     "typescript": "^4.9.3",
     "vsce": "^2.15.0"
   },

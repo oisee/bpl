@@ -17,6 +17,7 @@ export class BpmnLiteParser {
     private originalText: string = '';
     private currentLineIndex: number = 0;
     private endEventLane: string | null = null; // Track which lane contains the !End event
+    private lastTaskBeforeLaneSwitch: string | null = null; // Track the last task before switching lanes
 
     parse(text: string): any {
         // Reset state
@@ -37,6 +38,7 @@ export class BpmnLiteParser {
         this.originalText = text;
         this.currentLineIndex = 0;
         this.endEventLane = null;
+        this.lastTaskBeforeLaneSwitch = null;
 
         const lines = text.split('\n');
         
@@ -276,6 +278,12 @@ export class BpmnLiteParser {
             this.taskScope[`@${laneName}.${simpleName}`] = eventId;
         }
         
+        // If this is the first task after a lane switch (and not a process-level event), create connection
+        if (!isProcessLevel && this.lastTaskBeforeLaneSwitch && !this.lastTask) {
+            this.addConnection('flow', this.lastTaskBeforeLaneSwitch, eventId);
+            this.lastTaskBeforeLaneSwitch = null;
+        }
+        
         return eventId;
     }
 
@@ -293,6 +301,12 @@ export class BpmnLiteParser {
 
     private parseLane(line: string): void {
         const laneName = line.trim();
+        
+        // If switching lanes, store the last task before switching
+        if (this.currentLane && this.currentLane !== laneName && this.lastTask) {
+            this.lastTaskBeforeLaneSwitch = this.lastTask;
+        }
+        
         if (!this.lanes[laneName]) {
             this.lanes[laneName] = {
                 process: this.currentProcess,
@@ -348,6 +362,12 @@ export class BpmnLiteParser {
         this.taskScope[`${laneName}.${fullName}`] = taskId;
         this.taskScope[`@${laneName}.${fullName}`] = taskId;
         
+        // If this is the first task after a lane switch, create connection
+        if (this.lastTaskBeforeLaneSwitch && !this.lastTask) {
+            this.addConnection('flow', this.lastTaskBeforeLaneSwitch, taskId);
+            this.lastTaskBeforeLaneSwitch = null;
+        }
+        
         return taskId;
     }
 
@@ -378,6 +398,12 @@ export class BpmnLiteParser {
         this.taskScope[`@${laneName}.${simpleName}`] = gatewayId;
         
         this.gatewayStack.push(gatewayId);
+        
+        // If this is the first task after a lane switch, create connection
+        if (this.lastTaskBeforeLaneSwitch && !this.lastTask) {
+            this.addConnection('flow', this.lastTaskBeforeLaneSwitch, gatewayId);
+            this.lastTaskBeforeLaneSwitch = null;
+        }
         
         return gatewayId;
     }
