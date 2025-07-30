@@ -935,7 +935,8 @@
             gatewayBranchesMap[task.id] = {
               positive: [],
               negative: [],
-              nextTask: null
+              nextTask: null,
+              taskBeforeGateway: null
             };
           }
         });
@@ -1001,6 +1002,8 @@
               if (prevTask) {
                 // Connect previous task to gateway
                 this.addConnection('flow', prevTask, currentTaskId);
+                // Track the task before this gateway
+                gatewayBranchesMap[currentTaskId].taskBeforeGateway = prevTask;
               }
               
               // Don't update prevTask for gateway
@@ -1022,6 +1025,14 @@
             // If this is a task right after a gateway and has a previous task
             // that's not the gateway, we might need to skip the connection
             if (isAfterGateway && prevTask && !gatewayMap[prevTask]) {
+              // Check if the prevTask is the task that came before the gateway
+              const gatewayData = gatewayBranchesMap[sourceGateway];
+              if (gatewayData && prevTask === gatewayData.taskBeforeGateway) {
+                // Skip this connection - it would bypass the gateway
+                prevTask = currentTaskId;
+                continue;
+              }
+              
               // Don't connect if it's already connected from the gateway
               const fromGatewayConnections = this.connections.filter(conn =>
                 conn.sourceRef === sourceGateway && conn.targetRef === currentTaskId

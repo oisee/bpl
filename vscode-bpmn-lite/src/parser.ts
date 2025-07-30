@@ -677,7 +677,8 @@ export class BpmnLiteParser {
                 gatewayBranchesMap[task.id] = {
                     positive: [],
                     negative: [],
-                    nextTask: null
+                    nextTask: null,
+                    taskBeforeGateway: null
                 };
             }
         });
@@ -730,6 +731,8 @@ export class BpmnLiteParser {
                 if (currentTask.type === 'gateway') {
                     if (prevTask) {
                         this.addConnection('flow', prevTask, currentTaskId);
+                        // Track the task before this gateway
+                        gatewayBranchesMap[currentTaskId].taskBeforeGateway = prevTask;
                     }
                     continue;
                 }
@@ -746,6 +749,16 @@ export class BpmnLiteParser {
                 }
                 
                 if (isAfterGateway && prevTask && !gatewayMap[prevTask]) {
+                    // Check if the prevTask is the task that came before the gateway
+                    if (sourceGateway && gatewayBranchesMap[sourceGateway]) {
+                        const gatewayData = gatewayBranchesMap[sourceGateway];
+                        if (gatewayData && prevTask === gatewayData.taskBeforeGateway) {
+                            // Skip this connection - it would bypass the gateway
+                            prevTask = currentTaskId;
+                            continue;
+                        }
+                    }
+                    
                     const fromGatewayConnections = this.connections.filter(conn =>
                         conn.sourceRef === sourceGateway && conn.targetRef === currentTaskId
                     );
