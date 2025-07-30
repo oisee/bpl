@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Simple Parser Test</title>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10.6.1/dist/mermaid.min.js"></script>
+</head>
+<body>
+  <h1>Testing BPL Parser Connectivity</h1>
+  <div id="output"></div>
+  
+  <script>
+    // Load the parser HTML and extract the class
+    fetch('dist/index.html')
+      .then(response => response.text())
+      .then(html => {
+        // Extract parser class
+        const match = html.match(/class BpmnLiteParser \{[\s\S]*?\n    \}/);
+        if (!match) {
+          document.getElementById('output').innerHTML = 'Failed to extract parser';
+          return;
+        }
+        
+        // Evaluate the parser
+        eval(match[0]);
+        
+        // Simple test
+        const parser = new BpmnLiteParser();
+        const testDsl = `@Customer
+  Task A
+  Task B
+  Task C`;
+        
+        try {
+          const ast = parser.parse(testDsl);
+          
+          // Show results
+          let output = '<h2>Test: Basic Sequential Flow</h2>';
+          output += '<pre>DSL:\n' + testDsl + '</pre>';
+          output += '<h3>Connections:</h3><ul>';
+          
+          ast.connections.forEach(conn => {
+            output += `<li>${conn.sourceRef} → ${conn.targetRef} (${conn.type})</li>`;
+          });
+          
+          output += '</ul>';
+          output += '<h3>Expected:</h3><ul>';
+          output += '<li>customer_task_a → customer_task_b (sequenceFlow)</li>';
+          output += '<li>customer_task_b → customer_task_c (sequenceFlow)</li>';
+          output += '</ul>';
+          
+          document.getElementById('output').innerHTML = output;
+          
+        } catch (error) {
+          document.getElementById('output').innerHTML = 'Error: ' + error.message + '<br><pre>' + error.stack + '</pre>';
+        }
+      })
+      .catch(error => {
+        document.getElementById('output').innerHTML = 'Failed to load parser: ' + error;
+      });
+  </script>
+</body>
+</html>

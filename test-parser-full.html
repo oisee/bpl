@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>BPL Parser Connectivity Test</title>
+  <script src="src/index.html"></script>
+  <script src="test-connectivity.js"></script>
+  <style>
+    body {
+      font-family: monospace;
+      margin: 20px;
+      background: #1e1e1e;
+      color: #d4d4d4;
+    }
+    .test-result {
+      margin: 10px 0;
+      padding: 10px;
+      border-radius: 5px;
+    }
+    .passed {
+      background: #1e3a1e;
+      border: 1px solid #4caf50;
+    }
+    .failed {
+      background: #3a1e1e;
+      border: 1px solid #f44336;
+    }
+    .details {
+      margin-top: 10px;
+      font-size: 0.9em;
+      opacity: 0.8;
+    }
+    .missing {
+      color: #ff9800;
+    }
+    .extra {
+      color: #03a9f4;
+    }
+    .summary {
+      margin-top: 20px;
+      padding: 20px;
+      background: #2d2d30;
+      border-radius: 5px;
+      font-size: 1.2em;
+    }
+  </style>
+</head>
+<body>
+  <h1>BPL Parser Connectivity Tests</h1>
+  <div id="results"></div>
+  <div id="summary" class="summary"></div>
+
+  <script>
+    // Extract parser from index.html
+    function extractParser() {
+      const scripts = document.querySelectorAll('script');
+      for (const script of scripts) {
+        const text = script.textContent;
+        if (text.includes('class BpmnLiteParser')) {
+          // Extract and evaluate the parser class
+          const classMatch = text.match(/class BpmnLiteParser \{[\s\S]*?\n    \}/);
+          if (classMatch) {
+            eval(classMatch[0]);
+            return BpmnLiteParser;
+          }
+        }
+      }
+      return null;
+    }
+
+    // Run tests when page loads
+    window.addEventListener('load', () => {
+      const ParserClass = extractParser();
+      
+      if (!ParserClass) {
+        document.getElementById('results').innerHTML = '<div class="failed">Failed to extract parser from index.html</div>';
+        return;
+      }
+      
+      if (!window.connectivityTests) {
+        document.getElementById('results').innerHTML = '<div class="failed">test-connectivity.js not loaded</div>';
+        return;
+      }
+      
+      // Run the tests
+      const results = window.connectivityTests.runConnectivityTests(ParserClass);
+      
+      // Display results
+      const resultsDiv = document.getElementById('results');
+      resultsDiv.innerHTML = '';
+      
+      results.forEach(result => {
+        const div = document.createElement('div');
+        div.className = `test-result ${result.passed ? 'passed' : 'failed'}`;
+        
+        let html = `<strong>${result.passed ? '✅' : '❌'} ${result.name}</strong>`;
+        html += `<div class="details">`;
+        html += `Expected: ${result.stats.expected}, Actual: ${result.stats.actual}, Correct: ${result.stats.correct}`;
+        
+        if (result.stats.missing > 0) {
+          html += `<div class="missing">Missing (${result.stats.missing}):<br>`;
+          result.missing.forEach(m => {
+            html += `&nbsp;&nbsp;- ${m.from} → ${m.to} (${m.type})<br>`;
+          });
+          html += `</div>`;
+        }
+        
+        if (result.stats.extra > 0) {
+          html += `<div class="extra">Extra (${result.stats.extra}):<br>`;
+          result.extra.forEach(e => {
+            html += `&nbsp;&nbsp;- ${e.from} → ${e.to} (${e.type})<br>`;
+          });
+          html += `</div>`;
+        }
+        
+        html += `</div>`;
+        div.innerHTML = html;
+        resultsDiv.appendChild(div);
+      });
+      
+      // Summary
+      const passed = results.filter(r => r.passed).length;
+      const total = results.length;
+      const percentage = Math.round(passed / total * 100);
+      
+      const summaryDiv = document.getElementById('summary');
+      summaryDiv.innerHTML = `
+        <h2>Summary</h2>
+        <div>Tests Passed: ${passed}/${total} (${percentage}%)</div>
+        <div>Total Expected Connections: ${results.reduce((sum, r) => sum + r.stats.expected, 0)}</div>
+        <div>Total Actual Connections: ${results.reduce((sum, r) => sum + r.stats.actual, 0)}</div>
+        <div>Total Correct Connections: ${results.reduce((sum, r) => sum + r.stats.correct, 0)}</div>
+      `;
+    });
+  </script>
+</body>
+</html>
