@@ -363,10 +363,10 @@ export class BpmnLiteParser {
         this.taskScope[`@${laneName}.${fullName}`] = taskId;
         
         // If this is the first task after a lane switch, create connection
-        if (this.lastTaskBeforeLaneSwitch && !this.lastTask) {
-            this.addConnection('flow', this.lastTaskBeforeLaneSwitch, taskId);
-            this.lastTaskBeforeLaneSwitch = null;
-        }
+        // if (this.lastTaskBeforeLaneSwitch && !this.lastTask) {
+        //     this.addConnection('flow', this.lastTaskBeforeLaneSwitch, taskId);
+        //     this.lastTaskBeforeLaneSwitch = null;
+        // }
         
         return taskId;
     }
@@ -881,7 +881,7 @@ export class BpmnLiteParser {
                 );
                 
                 const targetAlreadyConnected = this.connections.some(conn =>
-                    conn.type === 'sequenceFlow' &&
+                    (conn.type === 'sequenceFlow' || conn.type === 'messageFlow') &&
                     conn.targetRef === firstTaskInNextLane
                 );
                 
