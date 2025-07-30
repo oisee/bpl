@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Fixed HTML Parser</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10.6.1/dist/mermaid.min.js"></script>
+</head>
+<body>
+    <h1>Testing Fixed Parser in HTML</h1>
+    
+    <div id="test-case">
+        <h2>Issue #4 Test Case</h2>
+        <pre id="bpl-input">:Sprint Development Process
+@Developer
+  receive: Review Feedback
+  ?Tests Pass
+    +deploy to staging
+    -fix issues
+  demo features</pre>
+    </div>
+    
+    <div id="results">
+        <h2>Results</h2>
+        <pre id="output"></pre>
+    </div>
+    
+    <div id="diagram">
+        <h2>Mermaid Diagram</h2>
+        <div class="mermaid" id="mermaid-output"></div>
+    </div>
+
+    <!-- Load the parser from dist/index.html -->
+    <script src="dist/index.html"></script>
+    
+    <script>
+        // Wait for parser to load
+        setTimeout(() => {
+            const bplInput = document.getElementById('bpl-input').textContent;
+            const output = document.getElementById('output');
+            
+            try {
+                const parser = new BpmnLiteParser();
+                const ast = parser.parse(bplInput);
+                
+                // Check for the problematic connection
+                let receiveTask = null;
+                let demoTask = null;
+                let gatewayTask = null;
+                
+                Object.values(parser.tasks).forEach(task => {
+                    if (task.name === 'receive: Review Feedback') receiveTask = task;
+                    if (task.name === 'demo features') demoTask = task;
+                    if (task.name === 'Tests Pass') gatewayTask = task;
+                });
+                
+                const hasDirectConnection = ast.connections.some(conn => 
+                    conn.sourceRef === receiveTask.id && 
+                    conn.targetRef === demoTask.id
+                );
+                
+                output.textContent = 'Test Results:\n\n';
+                output.textContent += `Direct connection (receive -> demo): ${hasDirectConnection ? '❌ BUG STILL EXISTS!' : '✅ FIXED!'}\n\n`;
+                
+                output.textContent += 'All connections:\n';
+                ast.connections.forEach(conn => {
+                    if (conn.type === 'sequenceFlow') {
+                        const source = Object.values(parser.tasks).find(t => t.id === conn.sourceRef);
+                        const target = Object.values(parser.tasks).find(t => t.id === conn.targetRef);
+                        output.textContent += `  ${source?.name} → ${target?.name}\n`;
+                    }
+                });
+                
+                // Generate Mermaid diagram
+                let mermaid = 'graph TB\n';
+                ast.processes.forEach(process => {
+                    process.lanes.forEach(lane => {
+                        mermaid += `    subgraph ${lane.id}["${lane.name}"]\n`;
+                        lane.elements.forEach(elem => {
+                            if (elem.type === 'gateway') {
+                                mermaid += `        ${elem.id}{{"${elem.name}"}}\n`;
+                            } else if (elem.type === 'branch') {
+                                const symbol = elem.branchType === 'positive' ? '✓' : '✗';
+                                mermaid += `        ${elem.id}["${symbol} ${elem.name}"]\n`;
+                            } else {
+                                mermaid += `        ${elem.id}["${elem.name}"]\n`;
+                            }
+                        });
+                        mermaid += '    end\n';
+                    });
+                });
+                
+                mermaid += '\n';
+                ast.connections.forEach(conn => {
+                    if (conn.type === 'sequenceFlow') {
+                        mermaid += `    ${conn.sourceRef} --> ${conn.targetRef}\n`;
+                    }
+                });
+                
+                document.getElementById('mermaid-output').textContent = mermaid;
+                document.getElementById('mermaid-output').removeAttribute('data-processed');
+                mermaidAPI.render('mermaid-svg', mermaid, (svgCode) => {
+                    document.getElementById('mermaid-output').innerHTML = svgCode;
+                });
+                
+            } catch (error) {
+                output.textContent = 'Error: ' + error.message;
+            }
+        }, 1000);
+    </script>
+</body>
+</html>

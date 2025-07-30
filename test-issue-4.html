@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Issue #4</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10.6.1/dist/mermaid.min.js"></script>
+</head>
+<body>
+    <h1>Testing Issue #4: Unnecessary Connection Between Tasks</h1>
+    
+    <div id="test-input">
+        <h2>Test BPL Input (from Issue #4)</h2>
+        <pre id="bpl-input">:Sprint Development Process
+
+@ProductOwner
+  define user stories
+  prioritize backlog
+  send: Sprint Goals
+  review demo
+  ?Accept Stories
+    +update release notes
+    -request changes
+
+@Developer
+  receive: Sprint Goals
+  estimate tasks
+  implement features
+  send: Code Review Request
+  receive: Review Feedback
+  ?Tests Pass
+    +deploy to staging
+    -fix issues
+  demo features
+
+@QA
+  receive: Code Review Request
+  review code
+  run tests
+  send: Review Feedback
+  ?Quality Check
+    +approve release
+    -report bugs
+
+#SprintBacklog define user stories
+#TestResults run tests</pre>
+    </div>
+    
+    <div id="test-output">
+        <h2>Parser Output</h2>
+        <pre id="ast-output"></pre>
+        
+        <h2>Connection Analysis</h2>
+        <pre id="connection-analysis"></pre>
+        
+        <h2>Mermaid Diagram</h2>
+        <div class="mermaid" id="mermaid-output"></div>
+    </div>
+
+    <!-- Include the parser from dist/index.html -->
+    <script src="dist/index.html"></script>
+    
+    <script>
+        // Wait for parser to be available
+        setTimeout(() => {
+            if (typeof BpmnLiteParser === 'undefined') {
+                // Extract parser code from the loaded HTML
+                const scripts = document.getElementsByTagName('script');
+                for (let script of scripts) {
+                    if (script.innerHTML.includes('class BpmnLiteParser')) {
+                        eval(script.innerHTML);
+                        break;
+                    }
+                }
+            }
+            
+            // Now run the test
+            const bplInput = document.getElementById('bpl-input').textContent;
+            const parser = new BpmnLiteParser();
+            const ast = parser.parse(bplInput);
+            
+            // Display AST
+            document.getElementById('ast-output').textContent = JSON.stringify(ast, null, 2);
+            
+            // Analyze connections
+            let analysis = '';
+            
+            // Find specific tasks
+            let receiveReviewFeedback = null;
+            let demoFeatures = null;
+            let testsPassGateway = null;
+            
+            Object.values(parser.tasks).forEach(task => {
+                if (task.name === 'receive: Review Feedback') {
+                    receiveReviewFeedback = task;
+                } else if (task.name === 'demo features') {
+                    demoFeatures = task;
+                } else if (task.name === 'Tests Pass') {
+                    testsPassGateway = task;
+                }
+            });
+            
+            analysis += 'Found tasks:\n';
+            analysis += `- receive: Review Feedback: ${receiveReviewFeedback?.id}\n`;
+            analysis += `- Tests Pass gateway: ${testsPassGateway?.id}\n`;
+            analysis += `- demo features: ${demoFeatures?.id}\n\n`;
+            
+            // Check connections from receive: Review Feedback
+            const connectionsFromReceive = ast.connections.filter(conn => 
+                conn.sourceRef === receiveReviewFeedback?.id
+            );
+            
+            analysis += `Connections from "receive: Review Feedback":\n`;
+            connectionsFromReceive.forEach(conn => {
+                const targetTask = Object.values(parser.tasks).find(t => t.id === conn.targetRef);
+                analysis += `  -> ${targetTask?.name} (${conn.targetRef})\n`;
+            });
+            
+            // Check for the problematic connection
+            const hasDirectConnection = ast.connections.some(conn => 
+                conn.sourceRef === receiveReviewFeedback?.id && 
+                conn.targetRef === demoFeatures?.id
+            );
+            
+            analysis += '\n';
+            if (hasDirectConnection) {
+                analysis += '❌ ISSUE CONFIRMED: Found unnecessary connection from "receive: Review Feedback" to "demo features"\n';
+                analysis += 'This bypasses the gateway logic and should not exist.\n';
+            } else {
+                analysis += '✅ No direct connection found between "receive: Review Feedback" and "demo features"\n';
+            }
+            
+            // Check expected flow
+            analysis += '\n\nExpected flow:\n';
+            analysis += '1. receive: Review Feedback -> Tests Pass (gateway)\n';
+            analysis += '2. Tests Pass -> deploy to staging (positive branch)\n';
+            analysis += '3. Tests Pass -> fix issues (negative branch)\n';
+            analysis += '4. deploy to staging -> demo features\n';
+            
+            document.getElementById('connection-analysis').textContent = analysis;
+            
+            // Generate Mermaid diagram
+            const mermaidCode = generateMermaidFromAST(ast);
+            document.getElementById('mermaid-output').textContent = mermaidCode;
+            document.getElementById('mermaid-output').removeAttribute('data-processed');
+            mermaid.init();
+            
+        }, 1000);
+        
+        function generateMermaidFromAST(ast) {
+            let mermaid = 'graph TB\n';
+            mermaid += '    Start([Start])\n';
+            mermaid += '    End([End])\n\n';
+            
+            // Add lanes
+            ast.processes.forEach(process => {
+                process.lanes.forEach(lane => {
+                    mermaid += `    subgraph ${lane.id}["${lane.name}"]\n`;
+                    lane.elements.forEach(element => {
+                        if (element.type === 'task') {
+                            mermaid += `        ${element.id}["${element.name}"]\n`;
+                        } else if (element.type === 'gateway') {
+                            mermaid += `        ${element.id}{{"${element.name}"}}\n`;
+                        } else if (element.type === 'branch') {
+                            const symbol = element.branchType === 'positive' ? '+' : '-';
+                            mermaid += `        ${element.id}["${symbol} ${element.name}"]\n`;
+                        } else if (element.type === 'send') {
+                            mermaid += `        ${element.id}["📤 ${element.name}"]\n`;
+                        } else if (element.type === 'receive') {
+                            mermaid += `        ${element.id}["📥 ${element.name}"]\n`;
+                        }
+                    });
+                    mermaid += '    end\n';
+                });
+            });
+            
+            // Add connections
+            mermaid += '\n';
+            ast.connections.forEach(conn => {
+                if (conn.type === 'sequenceFlow') {
+                    mermaid += `    ${conn.sourceRef} --> ${conn.targetRef}\n`;
+                } else if (conn.type === 'messageFlow') {
+                    mermaid += `    ${conn.sourceRef} -.->|${conn.name || ''}| ${conn.targetRef}\n`;
+                }
+            });
+            
+            return mermaid;
+        }
+    </script>
+</body>
+</html>
