@@ -1801,6 +1801,22 @@ BPMN-Lite is built on Domain-Driven Design principles:
 - **[Improvements Plan](003_improvements_plan.md)** - Future enhancements and optimizations
 - **[Testing Documentation](vscode-bpmn-lite/TESTING.md)** - Test strategies and scenarios
 
+### Recent Improvements & Updates (July 2025)
+
+- **[📚 Complete Articles Index](ARTICLES_INDEX.md)** - Full table of contents for all documentation
+- **[Test Report](013_TEST_REPORT_2025-07-30.md)** - Comprehensive regression test results
+- **[BPL Philosophy & Tests](014_BPL_PHILOSOPHY_AND_TESTS_2025-07-30.md)** - Deep dive into DSL design philosophy
+- **[Fix Summary](015_FIX_SUMMARY_2025-07-30.md)** - Issue #4 gateway bypass fix details
+- **[Comprehensive Documentation](016_README_COMPREHENSIVE_2025-07-30.md)** - Complete BPL guide with examples
+- **[Test Failures Analysis](017_TEST_FAILURES_ANALYSIS_2025-07-30.md)** - Detailed analysis of remaining edge cases
+
+#### Key Recent Changes
+
+- **✅ Fixed Issue #4**: Gateway bypass connections that were creating invalid process flows
+- **✅ Enhanced Parser Logic**: Improved gateway control flow to ensure meaningful business processes
+- **✅ Comprehensive Test Suite**: Added 15+ regression tests covering all major scenarios
+- **✅ Documentation Update**: Complete overhaul of documentation with philosophy and best practices
+
 ### Design Philosophy
 
 BPMN-Lite follows these core principles:
