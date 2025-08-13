@@ -3,10 +3,13 @@
 A revolutionary way to create business process diagrams - write in plain text, see beautiful diagrams instantly! 🚀
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Version-0.4.34-blue.svg" alt="Version">
+  <img src="https://img.shields.io/badge/Version-0.4.36-blue.svg" alt="Version">
+  <img src="https://img.shields.io/badge/Status-Under%20Construction-orange.svg" alt="Under Construction">
   <img src="https://img.shields.io/badge/License-MIT-green.svg" alt="License">
   <img src="https://img.shields.io/badge/PRs-Welcome-brightgreen.svg" alt="PRs Welcome">
 </p>
+
+> ⚠️ **UNDER CONSTRUCTION**: This project is actively being developed. Features may change, and some functionality might be unstable. We welcome feedback and contributions!
 
 ## 🎯 Why BPMN-Lite?
 
@@ -1756,6 +1759,26 @@ code --install-extension vscode-bpmn-lite/bpmn-lite-0.1.1.vsix
 4. Your diagram updates live as you type!
 
 [Full extension documentation](vscode-bpmn-lite/README.md)
+
+## 🚧 Current Development Status
+
+### Recently Completed (v0.4.35)
+- ✅ Interactive zoom/pan controls with persistent state
+- ✅ TypeScript compilation fixes for VSCode extension
+- ✅ Improved null safety and type annotations
+
+### In Progress
+- 🔄 Enhanced BPMN 2.0 XML export compatibility
+- 🔄 Advanced gateway patterns (parallel, inclusive)
+- 🔄 Subprocess and call activity support
+- 🔄 Timer and conditional events
+
+### Planned Features
+- 📋 Collaborative editing capabilities
+- 📋 Cloud storage integration
+- 📋 Advanced validation rules
+- 📋 Plugin system for custom extensions
+- 📋 AI-powered process optimization suggestions
 
 ## 🤝 Contributing
 
