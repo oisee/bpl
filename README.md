@@ -3,7 +3,7 @@
 A revolutionary way to create business process diagrams - write in plain text, see beautiful diagrams instantly! 🚀
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Version-0.4.27-blue.svg" alt="Version">
+  <img src="https://img.shields.io/badge/Version-0.4.34-blue.svg" alt="Version">
   <img src="https://img.shields.io/badge/License-MIT-green.svg" alt="License">
   <img src="https://img.shields.io/badge/PRs-Welcome-brightgreen.svg" alt="PRs Welcome">
 </p>
@@ -53,6 +53,12 @@ Switch between:
 - **Message Flows**: Automatic connection between send/receive tasks
 - **Cross-Lane Flows**: Automatic sequential task connectivity with break detection
 - **Data Objects**: Attach data to any process step
+
+### 🖱️ **Interactive Diagram Controls** (NEW!)
+- **Zoom & Pan**: Mouse wheel to zoom, drag to pan
+- **Persistent View State**: Diagram position and zoom preserved during live editing
+- **Zoom Controls**: Convenient buttons for zoom in/out and reset
+- **Smooth Navigation**: Professional diagram interaction with visual feedback
 
 ### 📤 **Export Options**
 - `.bpl` - Source code format

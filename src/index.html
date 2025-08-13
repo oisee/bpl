@@ -2133,6 +2133,12 @@
       <div id="error-container" class="error"></div>
       <div id="diagram-preview" class="preview-content active">
         <div class="controls" id="diagram-controls" style="display: none;">
+          <div class="zoom-controls" style="display: inline-block; margin-right: 10px;">
+            <button onclick="zoomIn()" title="Zoom In">🔍+</button>
+            <button onclick="zoomOut()" title="Zoom Out">🔍-</button>
+            <button onclick="resetZoom()" title="Reset Zoom">🔄</button>
+            <span class="zoom-level" id="zoom-level" style="margin-left: 10px;">100%</span>
+          </div>
           <div class="export-menu" id="exportMenu">
             <button onclick="toggleExportMenu()" title="Export Options">☰ Export</button>
             <div class="export-dropdown">
@@ -2324,6 +2330,150 @@
       }
     }
     
+    // Store diagram view state
+    let viewState = {
+      zoom: 1,
+      panX: 0,
+      panY: 0
+    };
+    
+    // Save current view state from SVG
+    function saveViewState() {
+      const svg = mermaidPreview.querySelector('svg');
+      if (svg) {
+        const viewBox = svg.getAttribute('viewBox');
+        if (viewBox) {
+          const parts = viewBox.split(' ');
+          if (parts.length === 4) {
+            viewState.panX = parseFloat(parts[0]);
+            viewState.panY = parseFloat(parts[1]);
+            // Calculate zoom from viewBox width/height vs svg dimensions
+            const vbWidth = parseFloat(parts[2]);
+            const svgWidth = svg.getBoundingClientRect().width;
+            if (vbWidth && svgWidth) {
+              viewState.zoom = svgWidth / vbWidth;
+            }
+          }
+        }
+      }
+    }
+    
+    // Restore view state to SVG
+    function restoreViewState() {
+      const svg = mermaidPreview.querySelector('svg');
+      if (svg && viewState.zoom !== 1) {
+        // Apply previous view state if it exists
+        const currentViewBox = svg.getAttribute('viewBox');
+        if (currentViewBox) {
+          const parts = currentViewBox.split(' ');
+          if (parts.length === 4) {
+            const width = parseFloat(parts[2]);
+            const height = parseFloat(parts[3]);
+            const newWidth = width / viewState.zoom;
+            const newHeight = height / viewState.zoom;
+            svg.setAttribute('viewBox', `${viewState.panX} ${viewState.panY} ${newWidth} ${newHeight}`);
+          }
+        }
+      }
+    }
+    
+    // Add zoom and pan controls
+    function addDiagramControls() {
+      const svg = mermaidPreview.querySelector('svg');
+      if (!svg) return;
+      
+      // Make SVG pannable and zoomable
+      let isPanning = false;
+      let startX, startY;
+      let currentX = 0, currentY = 0;
+      let currentZoom = 1;
+      
+      // Mouse wheel for zoom
+      svg.addEventListener('wheel', (e) => {
+        e.preventDefault();
+        const delta = e.deltaY > 0 ? 0.9 : 1.1;
+        currentZoom *= delta;
+        currentZoom = Math.max(0.1, Math.min(10, currentZoom));
+        
+        const viewBox = svg.getAttribute('viewBox');
+        if (viewBox) {
+          const parts = viewBox.split(' ');
+          if (parts.length === 4) {
+            const x = parseFloat(parts[0]);
+            const y = parseFloat(parts[1]);
+            const width = parseFloat(parts[2]);
+            const height = parseFloat(parts[3]);
+            
+            // Calculate new dimensions
+            const newWidth = width / delta;
+            const newHeight = height / delta;
+            
+            // Adjust position to zoom towards mouse position
+            const rect = svg.getBoundingClientRect();
+            const mouseX = (e.clientX - rect.left) / rect.width;
+            const mouseY = (e.clientY - rect.top) / rect.height;
+            
+            const newX = x + (width - newWidth) * mouseX;
+            const newY = y + (height - newHeight) * mouseY;
+            
+            svg.setAttribute('viewBox', `${newX} ${newY} ${newWidth} ${newHeight}`);
+            viewState.zoom = currentZoom;
+            viewState.panX = newX;
+            viewState.panY = newY;
+          }
+        }
+      });
+      
+      // Mouse drag for pan
+      svg.addEventListener('mousedown', (e) => {
+        if (e.button === 0) { // Left click only
+          isPanning = true;
+          startX = e.clientX;
+          startY = e.clientY;
+          svg.style.cursor = 'grabbing';
+        }
+      });
+      
+      svg.addEventListener('mousemove', (e) => {
+        if (!isPanning) return;
+        
+        const dx = e.clientX - startX;
+        const dy = e.clientY - startY;
+        
+        const viewBox = svg.getAttribute('viewBox');
+        if (viewBox) {
+          const parts = viewBox.split(' ');
+          if (parts.length === 4) {
+            const rect = svg.getBoundingClientRect();
+            const scale = parseFloat(parts[2]) / rect.width;
+            
+            const newX = parseFloat(parts[0]) - dx * scale;
+            const newY = parseFloat(parts[1]) - dy * scale;
+            
+            svg.setAttribute('viewBox', `${newX} ${newY} ${parts[2]} ${parts[3]}`);
+            viewState.panX = newX;
+            viewState.panY = newY;
+          }
+        }
+        
+        startX = e.clientX;
+        startY = e.clientY;
+      });
+      
+      svg.addEventListener('mouseup', () => {
+        isPanning = false;
+        svg.style.cursor = 'grab';
+      });
+      
+      svg.addEventListener('mouseleave', () => {
+        isPanning = false;
+        svg.style.cursor = 'grab';
+      });
+      
+      // Set initial cursor
+      svg.style.cursor = 'grab';
+    }
+    
     // Render function
     function renderDiagram() {
       // Parse first if needed
@@ -2333,6 +2483,9 @@
       
       if (currentMermaid) {
         try {
+          // Save current view state before clearing
+          saveViewState();
+          
           // Clear previous diagram
           mermaidPreview.innerHTML = '';
           
@@ -2361,7 +2514,18 @@
                 svg.style.height = 'auto';
                 svg.style.display = 'block';
                 svg.style.margin = '0 auto';
+                
+                // Save original viewBox for reset functionality
+                const viewBox = svg.getAttribute('viewBox');
+                if (viewBox && !svg.hasAttribute('data-original-viewbox')) {
+                  svg.setAttribute('data-original-viewbox', viewBox);
+                }
               }
+              
+              // Restore view state and add controls
+              restoreViewState();
+              addDiagramControls();
+              updateZoomLevel();
             })
             .catch(error => {
               console.error('Mermaid rendering error:', error);
@@ -2410,6 +2574,96 @@
       parseDSL();
       renderDiagram();
     }, 100);
+    
+    // Zoom control functions
+    function zoomIn() {
+      const svg = mermaidPreview.querySelector('svg');
+      if (!svg) return;
+      
+      const viewBox = svg.getAttribute('viewBox');
+      if (viewBox) {
+        const parts = viewBox.split(' ');
+        if (parts.length === 4) {
+          const x = parseFloat(parts[0]);
+          const y = parseFloat(parts[1]);
+          const width = parseFloat(parts[2]);
+          const height = parseFloat(parts[3]);
+          
+          const delta = 0.9;
+          const newWidth = width * delta;
+          const newHeight = height * delta;
+          const newX = x + (width - newWidth) / 2;
+          const newY = y + (height - newHeight) / 2;
+          
+          svg.setAttribute('viewBox', `${newX} ${newY} ${newWidth} ${newHeight}`);
+          viewState.zoom /= delta;
+          viewState.panX = newX;
+          viewState.panY = newY;
+          updateZoomLevel();
+        }
+      }
+    }
+    
+    function zoomOut() {
+      const svg = mermaidPreview.querySelector('svg');
+      if (!svg) return;
+      
+      const viewBox = svg.getAttribute('viewBox');
+      if (viewBox) {
+        const parts = viewBox.split(' ');
+        if (parts.length === 4) {
+          const x = parseFloat(parts[0]);
+          const y = parseFloat(parts[1]);
+          const width = parseFloat(parts[2]);
+          const height = parseFloat(parts[3]);
+          
+          const delta = 1.1;
+          const newWidth = width * delta;
+          const newHeight = height * delta;
+          const newX = x - (newWidth - width) / 2;
+          const newY = y - (newHeight - height) / 2;
+          
+          svg.setAttribute('viewBox', `${newX} ${newY} ${newWidth} ${newHeight}`);
+          viewState.zoom /= delta;
+          viewState.panX = newX;
+          viewState.panY = newY;
+          updateZoomLevel();
+        }
+      }
+    }
+    
+    function resetZoom() {
+      const svg = mermaidPreview.querySelector('svg');
+      if (!svg) return;
+      
+      // Get original viewBox from SVG
+      const originalViewBox = svg.getAttribute('data-original-viewbox');
+      if (originalViewBox) {
+        svg.setAttribute('viewBox', originalViewBox);
+        viewState.zoom = 1;
+        const parts = originalViewBox.split(' ');
+        if (parts.length === 4) {
+          viewState.panX = parseFloat(parts[0]);
+          viewState.panY = parseFloat(parts[1]);
+        }
+      } else {
+        // Fallback to getting dimensions from SVG
+        const width = svg.getBoundingClientRect().width;
+        const height = svg.getBoundingClientRect().height;
+        svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
+        viewState.zoom = 1;
+        viewState.panX = 0;
+        viewState.panY = 0;
+      }
+      updateZoomLevel();
+    }
+    
+    function updateZoomLevel() {
+      const zoomLevelEl = document.getElementById('zoom-level');
+      if (zoomLevelEl) {
+        zoomLevelEl.textContent = `${Math.round(viewState.zoom * 100)}%`;
+      }
+    }
     
     // Export menu toggle
     function toggleExportMenu() {
