@@ -52,8 +52,13 @@ function createWindow() {
             }).then(result => {
               if (!result.canceled && result.filePaths.length > 0) {
                 const filePath = result.filePaths[0];
-                const fileContent = fs.readFileSync(filePath, 'utf8');
-                mainWindow.webContents.send('file-opened', fileContent);
+                fs.readFile(filePath, 'utf8', (err, fileContent) => {
+                  if (err) {
+                    console.error('Error opening file:', err);
+                    return;
+                  }
+                  mainWindow.webContents.send('file-opened', fileContent);
+                });
               }
             }).catch(err => {
               console.error('Error opening file:', err);
@@ -149,27 +154,47 @@ app.whenReady().then(() => {
 
 // Handle IPC messages from renderer process
 ipcMain.on('export-to-excel', (event, data) => {
-  try {
-    // Write the AST to a temporary JSON file
-    const tempJsonPath = path.join(app.getPath('temp'), 'temp-ast.json');
-    fs.writeFileSync(tempJsonPath, JSON.stringify(data.ast, null, 2));
+  const tempJsonPath = path.join(app.getPath('temp'), 'temp-ast.json');
 
-    // Execute the Python script
-    const scriptPath = path.join(__dirname, 'dist', 'tools', 'ast_to_visio.py');
-    execSync(`python "${scriptPath}" "${tempJsonPath}" "${data.outputPath}"`);
+  fs.writeFile(tempJsonPath, JSON.stringify(data.ast, null, 2), err => {
+    if (err) {
+      return dialog.showErrorBox('Export Failed', `Failed to write temporary file: ${err.message}`);
+    }
 
-    dialog.showMessageBox({
-      type: 'info',
-      title: 'Export Successful',
-      message: 'The process has been exported to Excel successfully.',
-      buttons: ['OK']
-    });
-  } catch (error) {
-    dialog.showErrorBox(
-      'Export Failed',
-      `Failed to export to Excel: ${error.message}`
-    );
-  }
+    let pythonCmd;
+    try {
+      execSync('python3 --version');
+      pythonCmd = 'python3';
+    } catch (e) {
+      try {
+        execSync('python --version');
+        pythonCmd = 'python';
+      } catch (e2) {
+        return dialog.showErrorBox(
+          'Export Failed',
+          'Python is not installed or not in your PATH. Please install Python 3 to use the Excel export feature.'
+        );
+      }
+    }
+
+    try {
+      // Execute the Python script
+      const scriptPath = path.join(__dirname, 'dist', 'tools', 'ast_to_visio.py');
+      execSync(`"${pythonCmd}" "${scriptPath}" "${tempJsonPath}" "${data.outputPath}"`);
+
+      dialog.showMessageBox({
+        type: 'info',
+        title: 'Export Successful',
+        message: 'The process has been exported to Excel successfully.',
+        buttons: ['OK']
+      });
+    } catch (error) {
+      dialog.showErrorBox(
+        'Export Failed',
+        `An error occurred while running the export script: ${error.message}`
+      );
+    }
+  });
 });
 
 // Quit when all windows are closed, except on macOS

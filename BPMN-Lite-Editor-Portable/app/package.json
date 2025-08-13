@@ -1,12 +1,13 @@
 {
   "name": "bpmn-lite-dsl-editor",
-  "version": "0.1.0",
+  "version": "0.4.31",
   "description": "A minimal, intuitive domain-specific language for describing business process diagrams",
   "main": "main.js",
   "scripts": {
     "build": "node build.js",
     "start": "electron .",
     "start:web": "http-server dist -o",
+    "test": "echo 'Open test-browser.html in a browser to run tests'",
     "pack": "electron-builder --dir",
     "dist": "electron-builder",
     "dist:win": "electron-builder --win",
