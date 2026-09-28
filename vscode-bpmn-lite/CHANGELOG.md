@@ -2,6 +2,19 @@
 
 All notable changes to the "bpmn-lite" extension will be documented in this file.
 
+## [0.4.38] - 2026-09-28
+
+- Added a browser entrypoint so `oisee.bpl` runs in vscode.dev and virtual workspaces.
+- Bundled Mermaid with the extension for preview without a CDN request.
+- Made exports use virtual workspace URIs and browser-compatible byte encoding.
+- Added VS Code web host and visual preview checks.
+- Added a downloadable VSIX to GitHub Releases alongside Marketplace publication.
+
+## [0.4.37] - 2026-09-28
+
+- Fixed parser connections across process boundaries and added parser parity tests.
+- Fixed PNG export and removed the native `sharp` dependency.
+
 ## [0.4.4] - 2025-07-15
 
 ### Fixed

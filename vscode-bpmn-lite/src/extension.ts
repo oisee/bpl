@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { BpmnLitePreviewPanel } from './preview';
 import { BpmnLiteParser } from './parser';
+import { exportUri, utf8Bytes } from './web-utils';
 
 export function activate(context: vscode.ExtensionContext) {
     console.log('BPMN-Lite extension is now active!');
@@ -43,15 +44,15 @@ export function activate(context: vscode.ExtensionContext) {
                 const mermaid = parser.toMermaid();
 
                 const uri = await vscode.window.showSaveDialog({
-                    defaultUri: vscode.Uri.file(document.fileName.replace(/\.bpl$/, '.mmd')),
+                    defaultUri: exportUri(document, 'mmd'),
                     filters: {
                         'Mermaid': ['mmd', 'mermaid']
                     }
                 });
 
                 if (uri) {
-                    await vscode.workspace.fs.writeFile(uri, Buffer.from(mermaid, 'utf8'));
-                    vscode.window.showInformationMessage(`Exported to ${uri.fsPath}`);
+                    await vscode.workspace.fs.writeFile(uri, utf8Bytes(mermaid));
+                    vscode.window.showInformationMessage(`Exported to ${uri.toString(true)}`);
                 }
             } catch (error: any) {
                 vscode.window.showErrorMessage(`Export failed: ${error.message}`);
@@ -79,15 +80,15 @@ export function activate(context: vscode.ExtensionContext) {
                 const ast = parser.parse(content);
 
                 const uri = await vscode.window.showSaveDialog({
-                    defaultUri: vscode.Uri.file(document.fileName.replace(/\.bpl$/, '-ast.json')),
+                    defaultUri: exportUri(document, 'json', '-ast'),
                     filters: {
                         'JSON': ['json']
                     }
                 });
 
                 if (uri) {
-                    await vscode.workspace.fs.writeFile(uri, Buffer.from(JSON.stringify(ast, null, 2), 'utf8'));
-                    vscode.window.showInformationMessage(`Exported to ${uri.fsPath}`);
+                    await vscode.workspace.fs.writeFile(uri, utf8Bytes(JSON.stringify(ast, null, 2)));
+                    vscode.window.showInformationMessage(`Exported to ${uri.toString(true)}`);
                 }
             } catch (error: any) {
                 vscode.window.showErrorMessage(`Export failed: ${error.message}`);

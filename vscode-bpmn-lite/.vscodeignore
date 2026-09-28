@@ -10,3 +10,10 @@ vsc-extension-quickstart.md
 **/*.ts
 #node_modules/**
 out/test/**
+out/web/test.js
+out/parser-fixed.js
+out/web-test.js
+test/**
+test-parser.js
+scripts/**
+TESTING.md

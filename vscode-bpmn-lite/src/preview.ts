@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { BpmnLiteParser } from './parser';
+import { base64Bytes, exportUri, utf8Bytes } from './web-utils';
 
 export class BpmnLitePreviewPanel {
     public static currentPanel: BpmnLitePreviewPanel | undefined;
@@ -184,6 +185,7 @@ export class BpmnLitePreviewPanel {
     private _getHtmlForWebview(webview: vscode.Webview, mermaidCode: string, error: string, ast: any) {
         const config = vscode.workspace.getConfiguration('bpmn-lite');
         const theme = config.get<string>('preview.theme', 'default');
+        const mermaidUri = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'media', 'mermaid.min.js'));
 
         return `<!DOCTYPE html>
         <html lang="en">
@@ -191,7 +193,7 @@ export class BpmnLitePreviewPanel {
             <meta charset="UTF-8">
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
             <title>BPMN-Lite Preview</title>
-            <script src="https://cdn.jsdelivr.net/npm/mermaid@10.6.1/dist/mermaid.min.js"></script>
+            <script src="${mermaidUri}"></script>
             <style>
                 body {
                     font-family: var(--vscode-font-family);
@@ -659,14 +661,9 @@ export class BpmnLitePreviewPanel {
             .replace(/'/g, "&#039;");
     }
 
-    private getDefaultExportPath(extension: string): vscode.Uri {
+    private getDefaultExportPath(extension: string): vscode.Uri | undefined {
         const activeEditor = vscode.window.activeTextEditor;
-        if (activeEditor && activeEditor.document.languageId === 'bpmn-lite') {
-            const bplPath = activeEditor.document.fileName;
-            const baseName = bplPath.replace(/\.bpl$/, '');
-            return vscode.Uri.file(`${baseName}.${extension}`);
-        }
-        return vscode.Uri.file(`diagram.${extension}`);
+        return exportUri(activeEditor?.document.languageId === 'bpmn-lite' ? activeEditor.document : undefined, extension);
     }
 
     private async _exportPNG(pngData: string, dpi: number) {
@@ -678,7 +675,7 @@ export class BpmnLitePreviewPanel {
             
             if (!saveUri) return;
             
-            await vscode.workspace.fs.writeFile(saveUri, Buffer.from(pngData, 'base64'));
+            await vscode.workspace.fs.writeFile(saveUri, base64Bytes(pngData));
             vscode.window.showInformationMessage(`PNG exported successfully with ${dpi} DPI!`);
         } catch (error: any) {
             vscode.window.showErrorMessage(`Failed to export PNG: ${error.message}`);
@@ -694,7 +691,7 @@ export class BpmnLitePreviewPanel {
             
             if (!saveUri) return;
             
-            await vscode.workspace.fs.writeFile(saveUri, Buffer.from(svgData, 'utf8'));
+            await vscode.workspace.fs.writeFile(saveUri, utf8Bytes(svgData));
             vscode.window.showInformationMessage('SVG exported successfully!');
         } catch (error: any) {
             vscode.window.showErrorMessage(`Failed to export SVG: ${error.message}`);
@@ -710,7 +707,7 @@ export class BpmnLitePreviewPanel {
             
             if (!saveUri) return;
             
-            await vscode.workspace.fs.writeFile(saveUri, Buffer.from(mermaidCode, 'utf8'));
+            await vscode.workspace.fs.writeFile(saveUri, utf8Bytes(mermaidCode));
             vscode.window.showInformationMessage('Mermaid code exported successfully!');
         } catch (error: any) {
             vscode.window.showErrorMessage(`Failed to export Mermaid: ${error.message}`);
@@ -728,7 +725,7 @@ export class BpmnLitePreviewPanel {
             
             // For now, save the AST as JSON and inform about conversion
             const jsonUri = saveUri.with({ path: saveUri.path.replace('.xlsx', '-ast.json') });
-            await vscode.workspace.fs.writeFile(jsonUri, Buffer.from(JSON.stringify(ast, null, 2), 'utf8'));
+            await vscode.workspace.fs.writeFile(jsonUri, utf8Bytes(JSON.stringify(ast, null, 2)));
             
             vscode.window.showInformationMessage(
                 'AST saved as JSON. Use the ast_to_visio.py tool to convert to XLSX format.'
@@ -749,7 +746,7 @@ export class BpmnLitePreviewPanel {
             
             // Convert AST to BPMN XML
             const bpmnXml = this._astToBPMN(ast);
-            await vscode.workspace.fs.writeFile(saveUri, Buffer.from(bpmnXml, 'utf8'));
+            await vscode.workspace.fs.writeFile(saveUri, utf8Bytes(bpmnXml));
             vscode.window.showInformationMessage('BPMN file exported successfully!');
         } catch (error: any) {
             vscode.window.showErrorMessage(`Failed to export BPMN: ${error.message}`);

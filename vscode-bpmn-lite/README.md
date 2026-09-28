@@ -44,10 +44,12 @@ See your BPMN diagram update in real-time as you type - no save required! The pr
 ## 📦 Installation
 
 ### From VSIX Package (Recommended)
+Download `bpl-0.4.38.vsix` from the [latest GitHub Release](https://github.com/oisee/bpl/releases/latest), then install it in desktop VS Code:
 ```bash
-# Download the latest release
-code --install-extension bpl-0.4.37.vsix
+code --install-extension bpl-0.4.38.vsix
 ```
+
+For [vscode.dev](https://vscode.dev), install `oisee.bpl` from the Extensions view. The extension includes a browser entrypoint and its Mermaid renderer in the package.
 
 ### From Source
 ```bash
@@ -63,7 +65,7 @@ npm run compile
 npm run package
 
 # Install the generated VSIX
-code --install-extension bpl-0.4.37.vsix
+code --install-extension bpl-0.4.38.vsix
 ```
 
 ### Development Mode
@@ -217,8 +219,8 @@ npm ci
 npm test
 npm run package
 
-# Pushing a matching vsix-v* tag publishes the package through GitHub Actions.
-# The workflow uses the repository's VSCE_PAT secret.
+# Pushing a matching vsix-v* tag publishes to Marketplace and attaches
+# the VSIX to a GitHub Release through GitHub Actions.
 ```
 
 ## 🧪 Testing
@@ -232,6 +234,7 @@ The extension includes comprehensive test coverage:
 Run tests with:
 ```bash
 npm test
+npm run test:host
 npm run test:verbose
 ```
 

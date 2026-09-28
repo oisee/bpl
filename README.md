@@ -1741,10 +1741,14 @@ Experience the **ultimate BPMN-Lite workflow** with our VS Code extension featur
 ### 📦 Installation
 
 #### Quick Install (Recommended)
+
+Download the VSIX from the [latest GitHub Release](https://github.com/oisee/bpl/releases/latest).
+
 ```bash
-# The extension is already built!
-code --install-extension vscode-bpmn-lite/bpmn-lite-0.1.1.vsix
+code --install-extension bpl-0.4.38.vsix
 ```
+
+On [vscode.dev](https://vscode.dev), look for `oisee.bpl` in Extensions.
 
 #### Development Install
 1. Open VS Code in the `vscode-bpmn-lite` folder

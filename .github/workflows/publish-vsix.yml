@@ -7,7 +7,7 @@ on:
       - 'vsix-v*'
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   publish:
@@ -19,7 +19,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
           cache: npm
           cache-dependency-path: vscode-bpmn-lite/package-lock.json
       - run: npm ci
@@ -29,6 +29,7 @@ jobs:
           RELEASE_TAG: ${{ github.ref_name }}
         run: node -e "if (process.env.RELEASE_TAG !== 'vsix-v' + require('./package.json').version) process.exit(1)"
       - run: npm test
+      - run: npm run test:host
       - run: npm run package
       - uses: actions/upload-artifact@v4
         with:
@@ -38,3 +39,9 @@ jobs:
         run: npx vsce publish --packagePath "bpl-$(node -p 'require("./package.json").version').vsix"
         env:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
+      - name: Attach VSIX to GitHub Release
+        if: startsWith(github.ref, 'refs/tags/vsix-v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: gh release create "$RELEASE_TAG" "bpl-$(node -p 'require("./package.json").version').vsix" --repo "$GITHUB_REPOSITORY" --title "BPMN-Lite $(node -p 'require("./package.json").version')" --notes "Download the attached VSIX from Assets. In desktop VS Code, choose Extensions > Install from VSIX. On vscode.dev, install oisee.bpl from Extensions." --latest

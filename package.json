@@ -9,6 +9,7 @@
     "start:web": "http-server dist -o",
     "test": "node tests/parser.test.js",
     "test:visual": "node tests/browser-smoke.js",
+    "test:visual:extension": "node tests/extension-web-visual.js",
     "pack": "electron-builder --dir",
     "dist": "electron-builder",
     "dist:win": "electron-builder --win",

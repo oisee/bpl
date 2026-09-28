@@ -2,7 +2,7 @@
   "name": "bpl",
   "displayName": "BPMN-Lite",
   "description": "Live preview for BPMN-Lite DSL with syntax highlighting and real-time diagram rendering",
-  "version": "0.4.37",
+  "version": "0.4.38",
   "publisher": "oisee",
   "repository": {
     "type": "git",
@@ -27,6 +27,14 @@
     "onLanguage:bpmn-lite"
   ],
   "main": "./out/extension.js",
+  "browser": "./out/web/extension.js",
+  "extensionKind": [
+    "ui",
+    "workspace"
+  ],
+  "capabilities": {
+    "virtualWorkspaces": true
+  },
   "contributes": {
     "languages": [
       {
@@ -133,12 +141,14 @@
     }
   },
   "scripts": {
-    "vscode:prepublish": "npm run compile",
+    "vscode:prepublish": "npm run compile && npm run build:web",
     "compile": "tsc -p ./",
+    "build:web": "node scripts/build-web.js",
     "watch": "tsc -watch -p ./",
     "build": "node scripts/build.js",
     "package": "vsce package --no-dependencies",
-    "test": "npm run compile && node test/test-suite.js && node test/test-parser-parity.js",
+    "test": "npm run compile && npm run build:web && node test/test-suite.js && node test/test-parser-parity.js && node test/test-web.js",
+    "test:host": "vscode-test-web --browser=chromium --esm --quality=stable --extensionDevelopmentPath=. --extensionTestsPath=out/web/test.js",
     "test:verbose": "npm run compile && node test/test-suite.js --verbose",
     "test:scenarios": "node test/test-reference-scenarios.js",
     "test:end": "node test/test-end-regression.js",
@@ -147,7 +157,10 @@
   "devDependencies": {
     "@types/node": "16.x",
     "@types/vscode": "^1.74.0",
-    "typescript": "^4.9.3",
-    "vsce": "^2.15.0"
+    "@vscode/test-web": "^0.0.73",
+    "@vscode/vsce": "^4.0.0",
+    "esbuild": "^0.25.12",
+    "mermaid": "^10.6.1",
+    "typescript": "^4.9.3"
   }
 }
