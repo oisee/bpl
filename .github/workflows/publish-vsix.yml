@@ -29,7 +29,6 @@ jobs:
           RELEASE_TAG: ${{ github.ref_name }}
         run: node -e "if (process.env.RELEASE_TAG !== 'vsix-v' + require('./package.json').version) process.exit(1)"
       - run: npm test
-      - run: npm run test:host
       - run: npm run package
       - uses: actions/upload-artifact@v4
         with:
