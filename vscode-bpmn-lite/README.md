@@ -46,7 +46,7 @@ See your BPMN diagram update in real-time as you type - no save required! The pr
 ### From VSIX Package (Recommended)
 ```bash
 # Download the latest release
-code --install-extension bpmn-lite-0.4.27.vsix
+code --install-extension bpl-0.4.37.vsix
 ```
 
 ### From Source
@@ -63,7 +63,7 @@ npm run compile
 npm run package
 
 # Install the generated VSIX
-code --install-extension bpmn-lite-0.4.27.vsix
+code --install-extension bpl-0.4.37.vsix
 ```
 
 ### Development Mode
@@ -212,17 +212,13 @@ vscode-bpmn-lite/
 
 ### Publishing Steps
 ```bash
-# Install publishing tool
-npm install -g vsce
-
 # Package the extension
-vsce package
+npm ci
+npm test
+npm run package
 
-# Publish to marketplace
-vsce publish
-
-# Or publish with version bump
-vsce publish minor
+# Pushing a matching vsix-v* tag publishes the package through GitHub Actions.
+# The workflow uses the repository's VSCE_PAT secret.
 ```
 
 ## 🧪 Testing
@@ -270,7 +266,7 @@ See [LICENSE](../LICENSE) for full details.
 ## 🔗 Links
 
 - **Main Repository**: [github.com/oisee/bpl](https://github.com/oisee/bpl)
-- **VS Code Marketplace**: [BPMN-Lite](https://marketplace.visualstudio.com/items?itemName=bpmn-lite)
+- **VS Code Marketplace**: [BPMN-Lite](https://marketplace.visualstudio.com/items?itemName=oisee.bpl)
 - **Documentation**: [BPMN-Lite Docs](https://docs.bpmn-lite.io)
 - **Issue Tracker**: [GitHub Issues](https://github.com/oisee/bpl/issues)
 

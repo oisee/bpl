@@ -1,4 +1,4 @@
-    class BpmnLiteParser {
+class BpmnLiteParser {
       constructor() {
         this.processes = [];
         this.lanes = {};
@@ -81,7 +81,7 @@
               let taskId = null;
               
               // If we have a previous operator and this might be a reference to another task
-              if (prevOperator && !this.isSpecialLine(part)) {
+              if ((prevOperator && !this.isSpecialLine(part)) || /^@[^.]+\..+$/.test(part)) {
                 // Try to resolve it as a task reference first
                 taskId = this.resolveTaskId(part, true); // Create if not found
               }
@@ -110,11 +110,27 @@
           }
         }
 
+        this.reconcileImplicitTasks();
+
         // Auto-inject connection breaks after End events
         this.injectConnectionBreaksAfterEndEvents(lines);
 
         // Automatically connect tasks using the new connectivity engine
         this.connectTasks();
+
+        const seenConnections = new Set();
+        const seenIds = new Set();
+        this.connections = this.connections.filter(conn => {
+          const key = `${conn.type}\0${conn.sourceRef}\0${conn.targetRef}\0${conn.name}`;
+          if (seenConnections.has(key)) return false;
+          seenConnections.add(key);
+          const baseId = `conn_${this.normalizeId(conn.sourceRef)}_${this.normalizeId(conn.targetRef)}`;
+          let id = seenIds.has(baseId) ? `${baseId}_${this.normalizeId(conn.type)}` : baseId;
+          for (let n = 2; seenIds.has(id); n++) id = `${baseId}_${this.normalizeId(conn.type)}_${n}`;
+          conn.id = id;
+          seenIds.add(id);
+          return true;
+        });
 
         // Build the AST
         const ast = {
@@ -138,6 +154,32 @@
         };
 
         return ast;
+      }
+
+      reconcileImplicitTasks() {
+        for (const implicit of Object.values(this.tasks).filter(task => task.implicit && !task.qualifiedReference)) {
+          const implicitProcess = this.lanes[`@${implicit.lane}`]?.process;
+          const matches = Object.values(this.tasks).filter(task =>
+            !task.implicit && task.id !== implicit.id &&
+            this.lanes[`@${task.lane}`]?.process === implicitProcess &&
+            (this.normalizeId(task.name) === this.normalizeId(implicit.name) ||
+              (task.messageName && this.normalizeId(task.messageName) === this.normalizeId(implicit.name)))
+          );
+          if (matches.length !== 1) continue;
+          const actual = matches[0];
+          this.connections.forEach(conn => {
+            if (conn.sourceRef === implicit.id) conn.sourceRef = actual.id;
+            if (conn.targetRef === implicit.id) conn.targetRef = actual.id;
+          });
+          for (const [key, value] of Object.entries(this.taskScope)) {
+            if (value === implicit.id) this.taskScope[key] = actual.id;
+          }
+          for (const lane of Object.values(this.lanes)) {
+            lane.tasks = lane.tasks.filter(id => id !== implicit.id);
+          }
+          delete this.tasks[implicit.id];
+          delete this.taskLineNumbers[implicit.id];
+        }
       }
       
       splitConnections(line) {
@@ -260,6 +302,7 @@
             eventType: eventType,
             name: eventName,
             id: eventId,
+            process: this.currentProcess,
             lane: isProcessLevel ? null : this.currentLane.replace('@', '') // Process-level events have no lane
           };
           
@@ -287,8 +330,8 @@
       ensureProcess(name) {
         if (!this.processes.includes(name)) {
           this.processes.push(name);
-          this.currentProcess = name;
         }
+        this.currentProcess = name;
       }
 
       parseProcess(line) {
@@ -303,6 +346,8 @@
             process: this.currentProcess,
             tasks: []
           };
+        } else if (this.lanes[laneName].tasks.every(id => this.tasks[id]?.implicit)) {
+          this.lanes[laneName].process = this.currentProcess;
         }
         this.currentLane = laneName;
         this.lastTask = null; // Reset last task when changing lanes
@@ -344,7 +389,9 @@
           lane: laneName
         };
         
-        this.lanes[this.currentLane].tasks.push(taskId);
+        if (!this.lanes[this.currentLane].tasks.includes(taskId)) {
+          this.lanes[this.currentLane].tasks.push(taskId);
+        }
         
         // Add task to scope for reference in connections
         // Use simplified name without prefixes for lookup
@@ -700,8 +747,7 @@
         // Phase 2: Create implicit sequential connections
         this.createImplicitConnections(globalTaskOrder);
         
-        // Phase 3: Process explicit connections from arrows
-        this.processExplicitArrowConnections();
+        // Explicit arrows were resolved during the first pass.
         
         // Phase 4: Connect message flows
         this.connectMessageFlows();
@@ -762,6 +808,11 @@
         }
         return tasks;
       }
+
+      taskProcess(taskId) {
+        const task = this.tasks[taskId];
+        return task?.process ?? (task?.lane ? this.lanes[`@${task.lane}`]?.process : null);
+      }
       
       createImplicitConnections(globalTaskOrder) {
         console.log('Creating implicit sequential connections...');
@@ -770,10 +821,23 @@
         for (let i = 1; i < globalTaskOrder.length; i++) {
           const prev = globalTaskOrder[i - 1];
           const curr = globalTaskOrder[i];
+
+          if (this.taskProcess(prev.id) !== this.taskProcess(curr.id)) continue;
           
           // Check for connection break
           if (this.hasConnectionBreakBetween(prev.lineNumber, curr.lineNumber)) {
             console.log(`Break between ${prev.id} and ${curr.id}`);
+            continue;
+          }
+
+          // A gateway with branches reaches the next task through those branches.
+          if (this.tasks[prev.id]?.type === 'gateway' && this.tasks[prev.id].branches?.length) {
+            continue;
+          }
+          if (prev.lane !== curr.lane && this.connections.some(conn =>
+            conn.type === 'sequenceFlow' && conn.sourceRef === prev.id &&
+            conn.targetRef !== curr.id && this.tasks[conn.targetRef]?.lane !== prev.lane
+          )) {
             continue;
           }
           
@@ -928,6 +992,8 @@
             for (let i = gatewayIndex + 1; i < globalTaskOrder.length; i++) {
               const candidate = globalTaskOrder[i];
               const candidateTask = this.tasks[candidate.id];
+
+              if (this.taskProcess(candidate.id) !== this.taskProcess(task.id)) break;
               
               if (candidateTask && candidateTask.type !== 'branch') {
                 mergePoint = candidate.id;
@@ -943,7 +1009,9 @@
                   conn.sourceRef === branchId && conn.type === 'sequenceFlow'
                 );
                 
-                if (!hasOutgoing) {
+                if (!hasOutgoing && !this.hasConnectionBreakBetween(
+                  this.taskLineNumbers[branchId], this.taskLineNumbers[mergePoint]
+                )) {
                   this.addConnection('flow', branchId, mergePoint);
                 }
               });
@@ -952,13 +1020,17 @@
         });
         
         // Handle Start/End events
-        if (this.tasks['process_start'] && globalTaskOrder.length > 0) {
-          this.addConnection('flow', 'process_start', globalTaskOrder[0].id);
+        if (this.tasks['process_start']) {
+          const firstTask = globalTaskOrder.find(item =>
+            item.id !== 'process_start' && this.taskProcess(item.id) === this.taskProcess('process_start')
+          );
+          if (firstTask) this.addConnection('flow', 'process_start', firstTask.id);
         }
         
         if (this.tasks['process_end']) {
           // Find tasks with no outgoing connections
           globalTaskOrder.forEach(task => {
+            if (task.id === 'process_end' || this.taskProcess(task.id) !== this.taskProcess('process_end')) return;
             const hasOutgoing = this.connections.some(conn => 
               conn.sourceRef === task.id && conn.type === 'sequenceFlow'
             );
@@ -1256,6 +1328,8 @@
         for (let i = 0; i < allLanes.length - 1; i++) {
           const currentLane = allLanes[i];
           const nextLane = allLanes[i + 1];
+
+          if (currentLane.process !== nextLane.process) continue;
           
           // Skip if either lane is empty
           if (currentLane.tasks.length === 0 || nextLane.tasks.length === 0) {
@@ -1386,12 +1460,11 @@
         
         // 1. Check direct scope lookup
         if (this.taskScope[taskRef]) {
-          return this.taskScope[taskRef];
-        }
-        
-        const normalized = this.normalizeId(taskRef);
-        if (this.taskScope[normalized]) {
-          return this.taskScope[normalized];
+          const taskId = this.taskScope[taskRef];
+          if (taskRef.startsWith('@') && taskRef.includes('.') && this.tasks[taskId]?.implicit) {
+            this.tasks[taskId].qualifiedReference = true;
+          }
+          return taskId;
         }
         
         // 2. Check if it's a fully qualified reference (lane.task)
@@ -1409,25 +1482,26 @@
             
             const lookups = [
               `${lane}.${normalizedTask}`,
-              `@${lane}.${normalizedTask}`,
-              `${lane}_${normalizedTask}`
+              `@${lane}.${normalizedTask}`
             ];
             
             const normalizedLane = this.normalizeId(lane);
             lookups.push(
               `${normalizedLane}.${normalizedTask}`,
-              `@${normalizedLane}.${normalizedTask}`,
-              `${normalizedLane}_${normalizedTask}`
+              `@${normalizedLane}.${normalizedTask}`
             );
             
             for (const lookup of lookups) {
               if (this.taskScope[lookup]) {
-                return this.taskScope[lookup];
+                const taskId = this.taskScope[lookup];
+                if (this.tasks[taskId]?.implicit) this.tasks[taskId].qualifiedReference = true;
+                return taskId;
               }
             }
             
             const directId = `${normalizedLane}_${normalizedTask}`;
             if (this.tasks[directId]) {
+              if (this.tasks[directId].implicit) this.tasks[directId].qualifiedReference = true;
               return directId;
             }
             
@@ -1454,7 +1528,8 @@
                 name: task,
                 id: taskId,
                 lane: lane,
-                implicit: true
+                implicit: true,
+                qualifiedReference: true
               };
               
               // Add to target lane
@@ -1468,7 +1543,11 @@
               return taskId;
             }
           }
+          return null;
         }
+
+        const normalized = this.normalizeId(taskRef);
+        if (this.taskScope[normalized]) return this.taskScope[normalized];
         
         // 3. Search across all lanes in order
         const allLaneNames = Object.keys(this.lanes);

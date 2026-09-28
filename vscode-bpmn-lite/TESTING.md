@@ -102,7 +102,7 @@ This document summarizes the comprehensive testing suite created for the BPL (Bu
 - **File**: `scripts/build.js`
 - **Improvements**: Now automatically creates `.vsix` files for VSCode extension
 - **Usage**: `npm run build`
-- **Output**: Creates versioned `.vsix` files (e.g., `bpmn-lite-0.4.17.vsix`)
+- **Output**: Creates versioned `.vsix` files (e.g., `bpl-0.4.37.vsix`)
 
 ### Package.json Updates
 - Added `test` and `test:verbose` scripts

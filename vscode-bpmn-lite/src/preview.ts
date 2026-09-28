@@ -1,6 +1,5 @@
 import * as vscode from 'vscode';
 import { BpmnLiteParser } from './parser';
-import * as sharp from 'sharp';
 
 export class BpmnLitePreviewPanel {
     public static currentPanel: BpmnLitePreviewPanel | undefined;
@@ -73,7 +72,7 @@ export class BpmnLitePreviewPanel {
                         vscode.window.showErrorMessage(message.text);
                         return;
                     case 'exportPNG':
-                        await this._exportPNG(message.svgData, message.dpi);
+                        await this._exportPNG(message.pngData, message.dpi);
                         return;
                     case 'exportSVG':
                         await this._exportSVG(message.svgData);
@@ -506,7 +505,7 @@ export class BpmnLitePreviewPanel {
                     securityLevel: 'loose',
                     flowchart: {
                         useMaxWidth: true,
-                        htmlLabels: true,
+                        htmlLabels: false,
                         curve: 'basis'
                     }
                 });
@@ -528,23 +527,71 @@ export class BpmnLitePreviewPanel {
                 });
                 
                 // Export functions
-                function exportPNG() {
+                async function exportPNG() {
                     const svgElement = document.querySelector('.mermaid svg');
                     if (!svgElement) {
                         vscode.postMessage({ command: 'alert', text: 'No diagram to export' });
                         return;
                     }
-                    
-                    // Get user input for DPI
                     const dpi = prompt('Enter DPI for PNG export (default: 300):', '300');
-                    if (!dpi) return;
-                    
-                    const svgData = new XMLSerializer().serializeToString(svgElement);
-                    vscode.postMessage({ 
-                        command: 'exportPNG', 
-                        svgData: svgData,
-                        dpi: parseInt(dpi) || 300
+                    if (dpi === null) return;
+                    const parsedDpi = Number(dpi);
+                    if (!Number.isFinite(parsedDpi) || parsedDpi < 36 || parsedDpi > 600) {
+                        vscode.postMessage({ command: 'alert', text: 'DPI must be between 36 and 600' });
+                        return;
+                    }
+                    try {
+                        const pngData = await svgToPngData(svgElement, parsedDpi);
+                        vscode.postMessage({ command: 'exportPNG', pngData, dpi: parsedDpi });
+                    } catch (error) {
+                        vscode.postMessage({ command: 'alert', text: 'Failed to render PNG: ' + error.message });
+                    }
+                }
+
+                async function svgToPngData(svgElement, dpi) {
+                    const bounds = svgElement.getBoundingClientRect();
+                    const viewBox = svgElement.viewBox.baseVal;
+                    const width = Math.ceil(bounds.width || viewBox.width);
+                    const height = Math.ceil(bounds.height || viewBox.height);
+                    if (!width || !height) throw new Error('Diagram has no size');
+                    const scale = dpi / 96;
+                    const canvas = document.createElement('canvas');
+                    canvas.width = Math.ceil(width * scale);
+                    canvas.height = Math.ceil(height * scale);
+                    if (canvas.width * canvas.height > 100000000) throw new Error('Diagram is too large');
+                    const clone = svgElement.cloneNode(true);
+                    clone.setAttribute('width', width);
+                    clone.setAttribute('height', height);
+                    clone.querySelectorAll('foreignObject').forEach(label => {
+                        const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                        text.textContent = label.textContent.trim();
+                        text.setAttribute('x', String(parseFloat(label.getAttribute('width')) / 2));
+                        text.setAttribute('y', String(parseFloat(label.getAttribute('height')) / 2));
+                        text.setAttribute('text-anchor', 'middle');
+                        text.setAttribute('dominant-baseline', 'middle');
+                        text.setAttribute('fill', '#333');
+                        label.replaceWith(text);
                     });
+                    const url = URL.createObjectURL(new Blob(
+                        [new XMLSerializer().serializeToString(clone)],
+                        { type: 'image/svg+xml;charset=utf-8' }
+                    ));
+                    try {
+                        const image = new Image();
+                        await new Promise((resolve, reject) => {
+                            image.onload = resolve;
+                            image.onerror = () => reject(new Error('SVG image could not be loaded'));
+                            image.src = url;
+                        });
+                        const context = canvas.getContext('2d');
+                        if (!context) throw new Error('Canvas is unavailable');
+                        context.fillStyle = '#fff';
+                        context.fillRect(0, 0, canvas.width, canvas.height);
+                        context.drawImage(image, 0, 0, canvas.width, canvas.height);
+                        return canvas.toDataURL('image/png').split(',')[1];
+                    } finally {
+                        URL.revokeObjectURL(url);
+                    }
                 }
                 
                 function exportSVG() {
@@ -622,7 +669,7 @@ export class BpmnLitePreviewPanel {
         return vscode.Uri.file(`diagram.${extension}`);
     }
 
-    private async _exportPNG(svgData: string, dpi: number) {
+    private async _exportPNG(pngData: string, dpi: number) {
         try {
             const saveUri = await vscode.window.showSaveDialog({
                 defaultUri: this.getDefaultExportPath('png'),
@@ -631,13 +678,7 @@ export class BpmnLitePreviewPanel {
             
             if (!saveUri) return;
             
-            // Convert SVG to PNG using sharp
-            const density = Math.round(dpi); // DPI for sharp
-            const pngBuffer = await sharp(Buffer.from(svgData, 'utf8'), { density })
-                .png()
-                .toBuffer();
-            
-            await vscode.workspace.fs.writeFile(saveUri, pngBuffer);
+            await vscode.workspace.fs.writeFile(saveUri, Buffer.from(pngData, 'base64'));
             vscode.window.showInformationMessage(`PNG exported successfully with ${dpi} DPI!`);
         } catch (error: any) {
             vscode.window.showErrorMessage(`Failed to export PNG: ${error.message}`);

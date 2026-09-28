@@ -1,0 +1,40 @@
+name: Publish VS Code extension
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'vsix-v*'
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: vscode-bpmn-lite
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: vscode-bpmn-lite/package-lock.json
+      - run: npm ci
+      - name: Check tag matches extension version
+        if: startsWith(github.ref, 'refs/tags/vsix-v')
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: node -e "if (process.env.RELEASE_TAG !== 'vsix-v' + require('./package.json').version) process.exit(1)"
+      - run: npm test
+      - run: npm run package
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bpmn-lite-vsix
+          path: vscode-bpmn-lite/*.vsix
+      - name: Publish packaged VSIX
+        run: npx vsce publish --packagePath "bpl-$(node -p 'require("./package.json").version').vsix"
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}

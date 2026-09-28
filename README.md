@@ -59,7 +59,7 @@ Switch between:
 
 ### 🖱️ **Interactive Diagram Controls** (NEW!)
 - **Zoom & Pan**: Mouse wheel to zoom, drag to pan
-- **Persistent View State**: Diagram position and zoom preserved during live editing
+- **Persistent View State**: Diagram position and zoom preserved when rerendering the same text; new text starts at 100%
 - **Zoom Controls**: Convenient buttons for zoom in/out and reset
 - **Smooth Navigation**: Professional diagram interaction with visual feedback
 
@@ -1797,6 +1797,18 @@ git commit -m 'Add amazing feature'
 git push origin feature/amazing-feature
 ```
 
+Browser smoke checks render the editor at desktop and mobile widths and save screenshots under `artifacts/`:
+
+```bash
+npm ci
+npx playwright install chromium
+npm run test:visual
+```
+
+Set `CHROMIUM_PATH` when Chromium is outside Playwright's default location. Set `MERMAID_JS_PATH` to a local `mermaid.min.js` for an offline run.
+
+The VS Code extension is published by the [Publish VS Code extension](.github/workflows/publish-vsix.yml) workflow when a matching `vsix-v<version>` tag is pushed, or by manual dispatch. It uses the repository `VSCE_PAT` secret and does not publish on ordinary branch pushes.
+
 ## 📚 Theoretical Foundation & References
 
 ### Domain-Driven Design (DDD) Principles
@@ -1833,11 +1845,11 @@ BPMN-Lite is built on Domain-Driven Design principles:
 ### Recent Improvements & Updates (July 2025)
 
 - **[📚 Complete Articles Index](ARTICLES_INDEX.md)** - Full table of contents for all documentation
-- **[Test Report](013_TEST_REPORT_2025-07-30.md)** - Comprehensive regression test results
+- **[Test Report](reports/013_TEST_REPORT_2025-07-30.md)** - Comprehensive regression test results
 - **[BPL Philosophy & Tests](014_BPL_PHILOSOPHY_AND_TESTS_2025-07-30.md)** - Deep dive into DSL design philosophy
-- **[Fix Summary](015_FIX_SUMMARY_2025-07-30.md)** - Issue #4 gateway bypass fix details
+- **[Fix Summary](reports/015_FIX_SUMMARY_2025-07-30.md)** - Issue #4 gateway bypass fix details
 - **[Comprehensive Documentation](016_README_COMPREHENSIVE_2025-07-30.md)** - Complete BPL guide with examples
-- **[Test Failures Analysis](017_TEST_FAILURES_ANALYSIS_2025-07-30.md)** - Detailed analysis of remaining edge cases
+- **[Test Failures Analysis](reports/017_TEST_FAILURES_ANALYSIS_2025-07-30.md)** - Detailed analysis of remaining edge cases
 
 #### Key Recent Changes
 

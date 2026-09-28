@@ -3,13 +3,10 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; connect-src 'self';">
-  <title>BPMN-lite Parser Demo</title>
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data:; connect-src 'self';">
+  <title>BPMN-Lite Editor</title>
   <!-- Import Mermaid library -->
   <script src="https://cdn.jsdelivr.net/npm/mermaid@10.6.1/dist/mermaid.min.js"></script>
-  <!-- Import connectivity engine and tests -->
-  <script src="../shared/connectivity-engine.js"></script>
-  <script src="../test-connectivity.js"></script>
   <style>
     body {
       font-family: Arial, sans-serif;
@@ -232,6 +229,17 @@
       min-width: 50px;
       text-align: center;
     }
+
+    @media (max-width: 700px) {
+      body { height: auto; min-height: 100vh; overflow: auto; }
+      .main-container { flex-direction: column; overflow: visible; }
+      .editor-container { box-sizing: border-box; flex: none; height: 42vh; min-height: 280px; border-right: 0; border-bottom: 1px solid #ccc; }
+      .preview-container { box-sizing: border-box; flex: none; height: 58vh; min-height: 360px; }
+      .editor-controls, .save-controls, .controls { flex-wrap: wrap; }
+      .editor-controls { justify-content: flex-start; }
+      #code-editor { flex: 1; min-height: 0; }
+      .mermaid-preview { min-height: 250px; }
+    }
   </style>
   <script>
     class BpmnLiteParser {
@@ -317,7 +325,7 @@
               let taskId = null;
               
               // If we have a previous operator and this might be a reference to another task
-              if (prevOperator && !this.isSpecialLine(part)) {
+              if ((prevOperator && !this.isSpecialLine(part)) || /^@[^.]+\..+$/.test(part)) {
                 // Try to resolve it as a task reference first
                 taskId = this.resolveTaskId(part, true); // Create if not found
               }
@@ -346,11 +354,28 @@
           }
         }
 
+        this.reconcileImplicitTasks();
+
         // Auto-inject connection breaks after End events
         this.injectConnectionBreaksAfterEndEvents(lines);
 
         // Automatically connect tasks using the new connectivity engine
         this.connectTasks();
+
+        // References may have been resolved more than once during parsing.
+        const seenConnections = new Set();
+        const seenIds = new Set();
+        this.connections = this.connections.filter(conn => {
+          const key = `${conn.type}\0${conn.sourceRef}\0${conn.targetRef}\0${conn.name}`;
+          if (seenConnections.has(key)) return false;
+          seenConnections.add(key);
+          const baseId = `conn_${this.normalizeId(conn.sourceRef)}_${this.normalizeId(conn.targetRef)}`;
+          let id = seenIds.has(baseId) ? `${baseId}_${this.normalizeId(conn.type)}` : baseId;
+          for (let n = 2; seenIds.has(id); n++) id = `${baseId}_${this.normalizeId(conn.type)}_${n}`;
+          conn.id = id;
+          seenIds.add(id);
+          return true;
+        });
 
         // Build the AST
         const ast = {
@@ -374,6 +399,32 @@
         };
 
         return ast;
+      }
+
+      reconcileImplicitTasks() {
+        for (const implicit of Object.values(this.tasks).filter(task => task.implicit && !task.qualifiedReference)) {
+          const implicitProcess = this.lanes[`@${implicit.lane}`]?.process;
+          const matches = Object.values(this.tasks).filter(task =>
+            !task.implicit && task.id !== implicit.id &&
+            this.lanes[`@${task.lane}`]?.process === implicitProcess &&
+            (this.normalizeId(task.name) === this.normalizeId(implicit.name) ||
+              (task.messageName && this.normalizeId(task.messageName) === this.normalizeId(implicit.name)))
+          );
+          if (matches.length !== 1) continue;
+          const actual = matches[0];
+          this.connections.forEach(conn => {
+            if (conn.sourceRef === implicit.id) conn.sourceRef = actual.id;
+            if (conn.targetRef === implicit.id) conn.targetRef = actual.id;
+          });
+          for (const [key, value] of Object.entries(this.taskScope)) {
+            if (value === implicit.id) this.taskScope[key] = actual.id;
+          }
+          for (const lane of Object.values(this.lanes)) {
+            lane.tasks = lane.tasks.filter(id => id !== implicit.id);
+          }
+          delete this.tasks[implicit.id];
+          delete this.taskLineNumbers[implicit.id];
+        }
       }
       
       splitConnections(line) {
@@ -496,6 +547,7 @@
             eventType: eventType,
             name: eventName,
             id: eventId,
+            process: this.currentProcess,
             lane: isProcessLevel ? null : this.currentLane.replace('@', '') // Process-level events have no lane
           };
           
@@ -523,8 +575,8 @@
       ensureProcess(name) {
         if (!this.processes.includes(name)) {
           this.processes.push(name);
-          this.currentProcess = name;
         }
+        this.currentProcess = name;
       }
 
       parseProcess(line) {
@@ -539,6 +591,9 @@
             process: this.currentProcess,
             tasks: []
           };
+        } else if (this.lanes[laneName].tasks.every(id => this.tasks[id]?.implicit)) {
+          // A forward reference may have created the lane before its declaration.
+          this.lanes[laneName].process = this.currentProcess;
         }
         this.currentLane = laneName;
         this.lastTask = null; // Reset last task when changing lanes
@@ -580,7 +635,9 @@
           lane: laneName
         };
         
-        this.lanes[this.currentLane].tasks.push(taskId);
+        if (!this.lanes[this.currentLane].tasks.includes(taskId)) {
+          this.lanes[this.currentLane].tasks.push(taskId);
+        }
         
         // Add task to scope for reference in connections
         // Use simplified name without prefixes for lookup
@@ -936,8 +993,7 @@
         // Phase 2: Create implicit sequential connections
         this.createImplicitConnections(globalTaskOrder);
         
-        // Phase 3: Process explicit connections from arrows
-        this.processExplicitArrowConnections();
+        // Explicit arrows were resolved during the first pass.
         
         // Phase 4: Connect message flows
         this.connectMessageFlows();
@@ -998,6 +1054,11 @@
         }
         return tasks;
       }
+
+      taskProcess(taskId) {
+        const task = this.tasks[taskId];
+        return task?.process ?? (task?.lane ? this.lanes[`@${task.lane}`]?.process : null);
+      }
       
       createImplicitConnections(globalTaskOrder) {
         console.log('Creating implicit sequential connections...');
@@ -1006,10 +1067,23 @@
         for (let i = 1; i < globalTaskOrder.length; i++) {
           const prev = globalTaskOrder[i - 1];
           const curr = globalTaskOrder[i];
+
+          if (this.taskProcess(prev.id) !== this.taskProcess(curr.id)) continue;
           
           // Check for connection break
           if (this.hasConnectionBreakBetween(prev.lineNumber, curr.lineNumber)) {
             console.log(`Break between ${prev.id} and ${curr.id}`);
+            continue;
+          }
+
+          // A gateway with branches reaches the next task through those branches.
+          if (this.tasks[prev.id]?.type === 'gateway' && this.tasks[prev.id].branches?.length) {
+            continue;
+          }
+          if (prev.lane !== curr.lane && this.connections.some(conn =>
+            conn.type === 'sequenceFlow' && conn.sourceRef === prev.id &&
+            conn.targetRef !== curr.id && this.tasks[conn.targetRef]?.lane !== prev.lane
+          )) {
             continue;
           }
           
@@ -1164,6 +1238,8 @@
             for (let i = gatewayIndex + 1; i < globalTaskOrder.length; i++) {
               const candidate = globalTaskOrder[i];
               const candidateTask = this.tasks[candidate.id];
+
+              if (this.taskProcess(candidate.id) !== this.taskProcess(task.id)) break;
               
               if (candidateTask && candidateTask.type !== 'branch') {
                 mergePoint = candidate.id;
@@ -1179,7 +1255,9 @@
                   conn.sourceRef === branchId && conn.type === 'sequenceFlow'
                 );
                 
-                if (!hasOutgoing) {
+                if (!hasOutgoing && !this.hasConnectionBreakBetween(
+                  this.taskLineNumbers[branchId], this.taskLineNumbers[mergePoint]
+                )) {
                   this.addConnection('flow', branchId, mergePoint);
                 }
               });
@@ -1188,13 +1266,17 @@
         });
         
         // Handle Start/End events
-        if (this.tasks['process_start'] && globalTaskOrder.length > 0) {
-          this.addConnection('flow', 'process_start', globalTaskOrder[0].id);
+        if (this.tasks['process_start']) {
+          const firstTask = globalTaskOrder.find(item =>
+            item.id !== 'process_start' && this.taskProcess(item.id) === this.taskProcess('process_start')
+          );
+          if (firstTask) this.addConnection('flow', 'process_start', firstTask.id);
         }
         
         if (this.tasks['process_end']) {
           // Find tasks with no outgoing connections
           globalTaskOrder.forEach(task => {
+            if (task.id === 'process_end' || this.taskProcess(task.id) !== this.taskProcess('process_end')) return;
             const hasOutgoing = this.connections.some(conn => 
               conn.sourceRef === task.id && conn.type === 'sequenceFlow'
             );
@@ -1492,6 +1574,8 @@
         for (let i = 0; i < allLanes.length - 1; i++) {
           const currentLane = allLanes[i];
           const nextLane = allLanes[i + 1];
+
+          if (currentLane.process !== nextLane.process) continue;
           
           // Skip if either lane is empty
           if (currentLane.tasks.length === 0 || nextLane.tasks.length === 0) {
@@ -1622,12 +1706,11 @@
         
         // 1. Check direct scope lookup
         if (this.taskScope[taskRef]) {
-          return this.taskScope[taskRef];
-        }
-        
-        const normalized = this.normalizeId(taskRef);
-        if (this.taskScope[normalized]) {
-          return this.taskScope[normalized];
+          const taskId = this.taskScope[taskRef];
+          if (taskRef.startsWith('@') && taskRef.includes('.') && this.tasks[taskId]?.implicit) {
+            this.tasks[taskId].qualifiedReference = true;
+          }
+          return taskId;
         }
         
         // 2. Check if it's a fully qualified reference (lane.task)
@@ -1645,25 +1728,26 @@
             
             const lookups = [
               `${lane}.${normalizedTask}`,
-              `@${lane}.${normalizedTask}`,
-              `${lane}_${normalizedTask}`
+              `@${lane}.${normalizedTask}`
             ];
             
             const normalizedLane = this.normalizeId(lane);
             lookups.push(
               `${normalizedLane}.${normalizedTask}`,
-              `@${normalizedLane}.${normalizedTask}`,
-              `${normalizedLane}_${normalizedTask}`
+              `@${normalizedLane}.${normalizedTask}`
             );
             
             for (const lookup of lookups) {
               if (this.taskScope[lookup]) {
-                return this.taskScope[lookup];
+                const taskId = this.taskScope[lookup];
+                if (this.tasks[taskId]?.implicit) this.tasks[taskId].qualifiedReference = true;
+                return taskId;
               }
             }
             
             const directId = `${normalizedLane}_${normalizedTask}`;
             if (this.tasks[directId]) {
+              if (this.tasks[directId].implicit) this.tasks[directId].qualifiedReference = true;
               return directId;
             }
             
@@ -1690,7 +1774,8 @@
                 name: task,
                 id: taskId,
                 lane: lane,
-                implicit: true
+                implicit: true,
+                qualifiedReference: true
               };
               
               // Add to target lane
@@ -1704,7 +1789,11 @@
               return taskId;
             }
           }
+          return null;
         }
+
+        const normalized = this.normalizeId(taskRef);
+        if (this.taskScope[normalized]) return this.taskScope[normalized];
         
         // 3. Search across all lanes in order
         const allLaneNames = Object.keys(this.lanes);
@@ -1955,159 +2044,10 @@
     }
   </script>
   
-  <!-- Gateway Test Cases -->
-  <script>
-    function runGatewayTests() {
-      // Test case 1: Simple XOR gateway
-      const xorGatewayTest = `:XOR Gateway Test
-@Lane1
-  start task
-  ?Simple Decision
-    +yes path
-    -no path
-  end task`;
-      
-      // Test case 2: Complex gateway with custom labels
-      const complexGatewayTest = `:Complex Gateway Test
-@Lane1
-  start task
-  ?Payment Method
-    +|Credit Card| process credit card
-    +|Bank Transfer| process bank transfer
-    -|Cancel| cancel order
-  next task`;
-      
-      // Test case 3: Nested gateways
-      const nestedGatewayTest = `:Nested Gateway Test
-@Lane1
-  start task
-  ?First Decision
-    +?Nested Decision
-      +nested yes
-      -nested no
-    -no path
-  end task`;
-      
-      // Run tests and display results
-      const testCases = [
-        { name: "Simple XOR Gateway", dsl: xorGatewayTest },
-        { name: "Complex Gateway with Custom Labels", dsl: complexGatewayTest },
-        { name: "Nested Gateways", dsl: nestedGatewayTest }
-      ];
-      
-      const testResults = testCases.map(test => {
-        try {
-          const parser = new BpmnLiteParser();
-          const ast = parser.parse(test.dsl);
-          const mermaid = parser.toMermaid();
-          
-          // Check for essential elements in AST
-          const hasGateway = Object.values(parser.tasks).some(task => task.type === 'gateway');
-          const hasBranches = Object.values(parser.tasks).some(task => task.type === 'branch');
-          
-          return {
-            name: test.name,
-            success: hasGateway && hasBranches,
-            ast: ast,
-            mermaid: mermaid
-          };
-        } catch (error) {
-          return {
-            name: test.name,
-            success: false,
-            error: error.message
-          };
-        }
-      });
-      
-      console.log("Gateway Test Results:", testResults);
-      return testResults;
-    }
-    
-    // Run tests after page loads
-    window.addEventListener('load', () => {
-      console.log("%c BPMN-lite Parser Demo v2.1.0 (Connectivity Update) LOADED", "background: green; color: white; font-size: 20px");
-      
-      // Run gateway tests
-      const gatewayResults = runGatewayTests();
-      console.log("Gateway tests completed");
-      
-      // Run connectivity tests if available
-      let connectivityResults = null;
-      if (typeof window.connectivityTests !== 'undefined') {
-        console.log("Running connectivity tests...");
-        connectivityResults = window.connectivityTests.runConnectivityTests(BpmnLiteParser);
-        
-        // Display detailed results
-        console.log("=== CONNECTIVITY TEST RESULTS ===");
-        connectivityResults.forEach(result => {
-          const status = result.passed ? '✅' : '❌';
-          console.log(`${status} ${result.name}`);
-          console.log(`   Expected: ${result.stats.expected}, Actual: ${result.stats.actual}, Correct: ${result.stats.correct}`);
-          
-          if (result.stats.missing > 0) {
-            console.log(`   Missing (${result.stats.missing}):`);
-            result.missing.forEach(m => {
-              console.log(`     - ${m.from} -> ${m.to} (${m.type})`);
-            });
-          }
-          
-          if (result.stats.extra > 0) {
-            console.log(`   Extra (${result.stats.extra}):`);
-            result.extra.forEach(e => {
-              console.log(`     - ${e.from} -> ${e.to} (${e.type})`);
-            });
-          }
-        });
-        
-        const passed = connectivityResults.filter(r => r.passed).length;
-        const total = connectivityResults.length;
-        console.log(`\nTotal: ${passed}/${total} tests passed`);
-      }
-      
-      // Add test output to UI for easy visibility
-      setTimeout(() => {
-        const outputDiv = document.createElement('div');
-        outputDiv.style.position = 'fixed';
-        outputDiv.style.bottom = '10px';
-        outputDiv.style.right = '10px';
-        outputDiv.style.backgroundColor = connectivityResults ? 
-          (connectivityResults.every(r => r.passed) ? 'green' : 'orange') : 'yellow';
-        outputDiv.style.color = 'white';
-        outputDiv.style.padding = '10px';
-        outputDiv.style.zIndex = '1000';
-        outputDiv.style.border = '2px solid black';
-        outputDiv.style.fontFamily = 'monospace';
-        outputDiv.style.fontSize = '12px';
-        
-        let html = `<strong>Version: v2.1.0 (Connectivity Update)</strong><br>`;
-        html += `Gateway Tests: ${gatewayResults.filter(t => t.success).length}/${gatewayResults.length} passed<br>`;
-        
-        if (connectivityResults) {
-          const passed = connectivityResults.filter(r => r.passed).length;
-          const total = connectivityResults.length;
-          html += `<strong>Connectivity Tests: ${passed}/${total} passed</strong><br>`;
-          
-          // Show failing tests
-          const failed = connectivityResults.filter(r => !r.passed);
-          if (failed.length > 0) {
-            html += '<br><strong>Failed:</strong><br>';
-            failed.forEach(f => {
-              html += `- ${f.name}<br>`;
-            });
-          }
-        }
-        
-        outputDiv.innerHTML = html;
-        document.body.appendChild(outputDiv);
-      }, 2000);
-    });
-  </script>
 </head>
 <body>
   <header>
-    <div class="title">BPMN-lite Parser Demo v2.0.0 (2025-04-18 21:30)</div>
-    <div id="version-marker" style="background-color: yellow; color: black; padding: 5px; font-weight: bold;">LIVE DIAGRAM RENDERING ENABLED!</div>
+    <div class="title">BPMN-Lite Editor</div>
   </header>
   
   <div class="main-container">
@@ -2165,7 +2105,7 @@
       securityLevel: 'loose',
       flowchart: {
         useMaxWidth: false,
-        htmlLabels: true,
+        htmlLabels: false,
         curve: 'basis'
       }
     });
@@ -2308,8 +2248,10 @@
     function parseDSL() {
       try {
         const parser = new BpmnLiteParser();
-        currentAst = parser.parse(codeEditor.value);
-        currentMermaid = parser.toMermaid();
+        const ast = parser.parse(codeEditor.value);
+        const diagram = parser.toMermaid();
+        currentAst = ast;
+        currentMermaid = diagram;
         
         // Display AST
         astPreview.textContent = JSON.stringify(currentAst, null, 2);
@@ -2322,6 +2264,8 @@
         
         return true;
       } catch (error) {
+        currentAst = null;
+        currentMermaid = null;
         errorContainer.textContent = `Error parsing DSL: ${error.message || 'Unknown error'}`;
         errorContainer.style.display = 'block';
         
@@ -2347,12 +2291,6 @@
           if (parts.length === 4) {
             viewState.panX = parseFloat(parts[0]);
             viewState.panY = parseFloat(parts[1]);
-            // Calculate zoom from viewBox width/height vs svg dimensions
-            const vbWidth = parseFloat(parts[2]);
-            const svgWidth = svg.getBoundingClientRect().width;
-            if (vbWidth && svgWidth) {
-              viewState.zoom = svgWidth / vbWidth;
-            }
           }
         }
       }
@@ -2475,16 +2413,25 @@
     }
     
     // Render function
+    let renderRequest = 0;
+    let renderedMermaid = null;
     function renderDiagram() {
-      // Parse first if needed
-      if (!currentMermaid) {
-        if (!parseDSL()) return;
+      // Always parse the current editor text, including when the user clicks Render.
+      const request = ++renderRequest;
+      if (!parseDSL()) {
+        mermaidPreview.replaceChildren();
+        renderedMermaid = null;
+        return;
       }
       
       if (currentMermaid) {
         try {
           // Save current view state before clearing
-          saveViewState();
+          if (currentMermaid === renderedMermaid) {
+            saveViewState();
+          } else {
+            viewState = { zoom: 1, panX: 0, panY: 0 };
+          }
           
           // Clear previous diagram
           mermaidPreview.innerHTML = '';
@@ -2504,6 +2451,7 @@
           // Render using Mermaid
           mermaid.render(diagramId, currentMermaid)
             .then(result => {
+              if (request !== renderRequest) return;
               // Replace with the rendered SVG
               mermaidPreview.innerHTML = result.svg;
               
@@ -2526,8 +2474,10 @@
               restoreViewState();
               addDiagramControls();
               updateZoomLevel();
+              renderedMermaid = currentMermaid;
             })
             .catch(error => {
+              if (request !== renderRequest) return;
               console.error('Mermaid rendering error:', error);
               errorContainer.textContent = `Error rendering diagram: ${error.message || 'Unknown error'}`;
               errorContainer.style.display = 'block';
@@ -2552,7 +2502,6 @@
     
     // Live updating - debounced to avoid excessive updates
     const updatePreview = debounce(() => {
-      parseDSL();
       renderDiagram();
     }, 300);
     
@@ -2571,7 +2520,6 @@
     
     // Initial parse and render
     setTimeout(() => {
-      parseDSL();
       renderDiagram();
     }, 100);
     
@@ -2682,23 +2630,61 @@
     });
     
     // Export functions
-    function exportPNG() {
+    async function exportPNG() {
       const svgElement = document.querySelector('#mermaid-preview svg');
       if (!svgElement) {
         alert('No diagram to export');
         return;
       }
-      
-      // For now, export as SVG with PNG extension
-      const svgData = new XMLSerializer().serializeToString(svgElement);
-      const svgBlob = new Blob([svgData], {type: 'image/svg+xml;charset=utf-8'});
-      const svgUrl = URL.createObjectURL(svgBlob);
-      const downloadLink = document.createElement('a');
-      downloadLink.href = svgUrl;
-      downloadLink.download = getProcessName(codeEditor.value) + '.svg';
-      document.body.appendChild(downloadLink);
-      downloadLink.click();
-      document.body.removeChild(downloadLink);
+      try {
+        const bounds = svgElement.getBoundingClientRect();
+        const viewBox = svgElement.viewBox.baseVal;
+        const width = Math.ceil(bounds.width || viewBox.width);
+        const height = Math.ceil(bounds.height || viewBox.height);
+        if (!width || !height) throw new Error('Diagram has no size');
+        const canvas = document.createElement('canvas');
+        canvas.width = width * 2;
+        canvas.height = height * 2;
+        if (canvas.width * canvas.height > 100000000) throw new Error('Diagram is too large');
+        const clone = svgElement.cloneNode(true);
+        clone.setAttribute('width', width);
+        clone.setAttribute('height', height);
+        clone.querySelectorAll('foreignObject').forEach(label => {
+          const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+          text.textContent = label.textContent.trim();
+          text.setAttribute('x', String(parseFloat(label.getAttribute('width')) / 2));
+          text.setAttribute('y', String(parseFloat(label.getAttribute('height')) / 2));
+          text.setAttribute('text-anchor', 'middle');
+          text.setAttribute('dominant-baseline', 'middle');
+          text.setAttribute('fill', '#333');
+          label.replaceWith(text);
+        });
+        const url = URL.createObjectURL(new Blob(
+          [new XMLSerializer().serializeToString(clone)],
+          {type: 'image/svg+xml;charset=utf-8'}
+        ));
+        try {
+          const image = new Image();
+          await new Promise((resolve, reject) => {
+            image.onload = resolve;
+            image.onerror = () => reject(new Error('SVG image could not be loaded'));
+            image.src = url;
+          });
+          const context = canvas.getContext('2d');
+          if (!context) throw new Error('Canvas is unavailable');
+          context.fillStyle = '#fff';
+          context.fillRect(0, 0, canvas.width, canvas.height);
+          context.drawImage(image, 0, 0, canvas.width, canvas.height);
+          const downloadLink = document.createElement('a');
+          downloadLink.href = canvas.toDataURL('image/png');
+          downloadLink.download = getProcessName(codeEditor.value) + '.png';
+          downloadLink.click();
+        } finally {
+          URL.revokeObjectURL(url);
+        }
+      } catch (error) {
+        alert('Failed to export PNG: ' + error.message);
+      }
     }
     
     function exportSVG() {

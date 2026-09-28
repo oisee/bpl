@@ -16,3 +16,6 @@ out/
 *.swo
 .DS_Store
 **/.claude/settings.local.json
+
+# Local visual test artifacts
+artifacts/
